@@ -4,6 +4,8 @@ use std::io::{BufRead, BufReader, Read};
 
 const EMPTYNODE: u16 = 65535;
 const CPU_OFFSET: u16 = 13000;
+const NGND: u16 = 2;
+const NPWR: u16 = 1;
 
 pub struct TransistorDefinition {
     name: String,
@@ -20,15 +22,16 @@ pub struct Transistor {
     name: String,
 }
 
+#[derive(Clone)]
 pub struct Node {
     state: bool,
     pullup: bool,
     pulldown: bool,
     floating: bool,
-    area: i32,
+    area: i64,
     num: u16,
     gates: Vec<u16>,
-    segs: Vec<Vec<u16>>,
+    segs: Vec<(u16, u16)>,
 }
 
 impl Default for Node {
@@ -187,6 +190,47 @@ fn load_ppu_nodes<R: Read>(reader: R) -> Vec<Vec<(i32, i32)>> {
         .collect()
 }
 
+fn setup_nodes(segdefs: &[Vec<u16>]) -> Vec<Node> {
+    let max_id = usize::from(
+        segdefs
+            .iter()
+            .max_by(|seg1, seg2| seg1[0].cmp(&seg2[0]))
+            .unwrap()[0],
+    );
+    let mut nodes = vec![Node::default(); max_id + 1];
+    for seg in segdefs.iter() {
+        let w = seg[0];
+        let w_idx = w as usize;
+        if nodes[w_idx].num == EMPTYNODE {
+            nodes[w_idx].num = w as _;
+            nodes[w_idx].pullup = seg[1] == 1;
+            nodes[w_idx].state = false;
+            nodes[w_idx].area = 0;
+        }
+
+        if w == NGND || w == NPWR {
+            continue;
+        }
+
+        let mut area = i64::from(seg[seg.len() - 2]) * i64::from(seg[4])
+            - i64::from(seg[3]) * i64::from(seg[seg.len() - 1]);
+        let mut j = 3;
+        loop {
+            if j + 4 >= seg.len() {
+                break;
+            }
+
+            area += i64::from(seg[j]) * i64::from(seg[j + 3])
+                - i64::from(seg[j + 2]) * i64::from(seg[j - 1]);
+            j += 2;
+        }
+        // TODO: area will overflow here if using i32, is this a bug in the C++ source?
+        nodes[w_idx].area += area.abs();
+        nodes[w_idx].segs.push((seg[3], *seg.last().unwrap()))
+    }
+    nodes
+}
+
 fn main() {
     let conversion_table = id_conversion_table();
 
@@ -233,6 +277,7 @@ fn main() {
     let palette_nodes = load_ppu_nodes(File::open("data/palettenodes.txt").unwrap());
     let sprite_nodes = load_ppu_nodes(File::open("data/spritenodes.txt").unwrap());
 
+    let nodes = setup_nodes(&seg_defs);
     println!("segdef entries: {}", seg_defs.len());
     println!("cpusegdef entries: {}", cpu_seg_defs.len());
     println!("transdefs entries: {}", transistor_defs.len());
@@ -241,4 +286,5 @@ fn main() {
     println!("cpu_node_names entries: {}", cpu_node_names.len());
     println!("palette_nodes entries: {}", palette_nodes.len());
     println!("sprite_nodes entries: {}", sprite_nodes.len());
+    println!("nodes entries: {}", nodes.len());
 }
