@@ -1,6 +1,6 @@
 use fnv::FnvHashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, Write};
 
 const EMPTYNODE: u16 = 65535;
 const CPU_OFFSET: u16 = 13000;
@@ -163,7 +163,7 @@ fn load_node_names<R: Read>(
                 .map(|s| s.trim().to_owned())
                 .collect::<Vec<String>>();
 
-            let id = (values[1].parse::<i32>().unwrap() + i32::from(segment_id_offset)) as u16;
+            let id = (values[1].parse::<i64>().unwrap() + i64::from(segment_id_offset)) as u16;
             (
                 format!("{}{}", name_prefix, values[0]),
                 convert_id(id, conversion_table),
@@ -233,59 +233,80 @@ fn setup_nodes(segdefs: &[Vec<u16>]) -> Vec<Node> {
 
 fn main() {
     let conversion_table = id_conversion_table();
+    let seg_defs =  {
+        let mut seg_defs = load_segment_definitions(
+            File::open("data/segdefs.txt").unwrap(),
+            0,
+            &conversion_table,
+        );
 
-    let seg_defs = load_segment_definitions(
-        File::open("data/segdefs.txt").unwrap(),
-        0,
-        &conversion_table,
-    );
+        let cpu_seg_defs = load_segment_definitions(
+            File::open("data/cpusegdefs.txt").unwrap(),
+            CPU_OFFSET,
+            &conversion_table,
+        );
 
-    let cpu_seg_defs = load_segment_definitions(
-        File::open("data/cpusegdefs.txt").unwrap(),
-        CPU_OFFSET,
-        &conversion_table,
-    );
+        seg_defs.extend(cpu_seg_defs);
+        seg_defs
+    };
 
-    let transistor_defs = load_transistor_definitions(
-        File::open("data/transdefs.txt").unwrap(),
-        "",
-        0,
-        &conversion_table,
-    );
+    let trans_defs = {
+        let mut trans_defs = load_transistor_definitions(
+            File::open("data/transdefs.txt").unwrap(),
+            "",
+            0,
+            &conversion_table,
+        );
 
-    let cpu_transistor_defs = load_transistor_definitions(
-        File::open("data/cputransdefs.txt").unwrap(),
-        "cpu_",
-        CPU_OFFSET,
-        &conversion_table,
-    );
+        let cpu_transistor_defs = load_transistor_definitions(
+            File::open("data/cputransdefs.txt").unwrap(),
+            "cpu_",
+            CPU_OFFSET,
+            &conversion_table,
+        );
 
-    let node_names = load_node_names(
-        File::open("data/nodenames.txt").unwrap(),
-        "",
-        CPU_OFFSET,
-        &conversion_table,
-    );
+        trans_defs.extend(cpu_transistor_defs);
+        trans_defs
+    };
 
-    node_names.iter().for_each(|(k, v)| println!("{},{}", k, v));
+    let node_names = {
+        let mut node_names = load_node_names(
+            File::open("data/nodenames.txt").unwrap(),
+            "",
+            0,
+            &conversion_table,
+        );
 
-    let cpu_node_names = load_node_names(
-        File::open("data/cpunodenames.txt").unwrap(),
-        "",
-        CPU_OFFSET,
-        &conversion_table,
-    );
+
+        let cpu_node_names = load_node_names(
+            File::open("data/cpunodenames.txt").unwrap(),
+            "cpu_",
+            CPU_OFFSET,
+            &conversion_table,
+        );
+
+        node_names.extend(cpu_node_names);
+
+        node_names
+    };
+
+    {
+        let node_names: std::collections::BTreeSet<_> = node_names.iter()
+            .map(|(k,v)| format!("{},{}", k, v))
+            .collect();
+
+        let mut file = File::create("node_names.txt").unwrap();
+        file.write(format!("Entries: {}\n", node_names.len()).as_bytes()).unwrap();
+        node_names.iter()
+            .for_each(|l| {file.write(format!("{}\n", l).as_bytes()).unwrap();});
+    }
 
     let palette_nodes = load_ppu_nodes(File::open("data/palettenodes.txt").unwrap());
     let sprite_nodes = load_ppu_nodes(File::open("data/spritenodes.txt").unwrap());
 
     let nodes = setup_nodes(&seg_defs);
     println!("segdef entries: {}", seg_defs.len());
-    println!("cpusegdef entries: {}", cpu_seg_defs.len());
-    println!("transdefs entries: {}", transistor_defs.len());
-    println!("cputransdefs entries: {}", cpu_transistor_defs.len());
-    println!("node_names entries: {}", node_names.len());
-    println!("cpu_node_names entries: {}", cpu_node_names.len());
+    println!("transdef entries: {}", trans_defs.len());
     println!("palette_nodes entries: {}", palette_nodes.len());
     println!("sprite_nodes entries: {}", sprite_nodes.len());
     println!("nodes entries: {}", nodes.len());
