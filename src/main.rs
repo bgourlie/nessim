@@ -136,11 +136,11 @@ fn load_transistor_definitions<R: Read>(
                     conversion_table,
                 ),
                 c1: convert_id(
-                    values[1].parse::<u16>().unwrap() + segment_id_offset,
+                    values[2].parse::<u16>().unwrap() + segment_id_offset,
                     conversion_table,
                 ),
                 c2: convert_id(
-                    values[1].parse::<u16>().unwrap() + segment_id_offset,
+                    values[3].parse::<u16>().unwrap() + segment_id_offset,
                     conversion_table,
                 ),
             }
@@ -266,6 +266,8 @@ fn main() {
         CPU_OFFSET,
         &conversion_table,
     );
+
+    node_names.iter().for_each(|(k, v)| println!("{},{}", k, v));
 
     let cpu_node_names = load_node_names(
         File::open("data/cpunodenames.txt").unwrap(),
