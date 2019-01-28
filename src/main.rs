@@ -60,7 +60,7 @@ struct DataDefinitions {
 pub fn id_conversion_table() -> FnvHashMap<u16, u16> {
     let mut map = FnvHashMap::default();
     map.insert(10000 + CPU_OFFSET, 1); // vcc
-    map.insert(10001 + CPU_OFFSET, 1); // vss
+    map.insert(10001 + CPU_OFFSET, 2); // vss
     map.insert(10004 + CPU_OFFSET, 1934); // reset
 
     map.insert(11669 + CPU_OFFSET, 772); // cpu_clk_in -> clk0
@@ -233,7 +233,7 @@ fn setup_nodes(segdefs: &[Vec<u16>]) -> Vec<Node> {
 
 fn main() {
     let conversion_table = id_conversion_table();
-    let seg_defs =  {
+    let seg_defs = {
         let mut seg_defs = load_segment_definitions(
             File::open("data/segdefs.txt").unwrap(),
             0,
@@ -277,7 +277,6 @@ fn main() {
             &conversion_table,
         );
 
-
         let cpu_node_names = load_node_names(
             File::open("data/cpunodenames.txt").unwrap(),
             "cpu_",
@@ -291,14 +290,31 @@ fn main() {
     };
 
     {
-        let node_names: std::collections::BTreeSet<_> = node_names.iter()
-            .map(|(k,v)| format!("{},{}", k, v))
+        let mut conversion_table: Vec<(u16, u16)> =
+            conversion_table.into_iter().map(|v| v).collect();
+
+        conversion_table.sort_by(|(a1, b1), (a2, b2)| a1.cmp(a2));
+
+        let mut file = File::create("conversion_table.txt").unwrap();
+        file.write(format!("Entries: {}\n", conversion_table.len()).as_bytes())
+            .unwrap();
+        conversion_table.iter().for_each(|(a, b)| {
+            file.write(format!("{},{}\n", a, b).as_bytes()).unwrap();
+        });
+    }
+
+    {
+        let node_names: std::collections::BTreeSet<_> = node_names
+            .iter()
+            .map(|(k, v)| format!("{},{}", k, v))
             .collect();
 
         let mut file = File::create("node_names.txt").unwrap();
-        file.write(format!("Entries: {}\n", node_names.len()).as_bytes()).unwrap();
-        node_names.iter()
-            .for_each(|l| {file.write(format!("{}\n", l).as_bytes()).unwrap();});
+        file.write(format!("Entries: {}\n", node_names.len()).as_bytes())
+            .unwrap();
+        node_names.iter().for_each(|l| {
+            file.write(format!("{}\n", l).as_bytes()).unwrap();
+        });
     }
 
     let palette_nodes = load_ppu_nodes(File::open("data/palettenodes.txt").unwrap());
