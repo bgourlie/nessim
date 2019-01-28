@@ -293,91 +293,10 @@ fn main() {
     let sprite_nodes = load_ppu_nodes(File::open("data/spritenodes.txt").unwrap());
     let nodes = setup_nodes(&seg_defs);
 
-    {
-        let mut file = File::create("palette_nodes.txt").unwrap();
-        file.write(format!("Entries: {}\n", palette_nodes.len()).as_bytes())
-            .unwrap();
-        palette_nodes.iter().for_each(|seg| {
-            let line = seg
-                .iter()
-                .map(|(i, j)| format!("{},{}", i, j))
-                .collect::<Vec<String>>()
-                .join("|");
-            file.write(format!("{}\r\n", line).as_bytes()).unwrap();
-        });
-    }
-
-    {
-        let mut file = File::create("sprite_nodes.txt").unwrap();
-        file.write(format!("Entries: {}\n", sprite_nodes.len()).as_bytes())
-            .unwrap();
-        sprite_nodes.iter().for_each(|seg| {
-            let line = seg
-                .iter()
-                .map(|(i, j)| format!("{},{}", i, j))
-                .collect::<Vec<String>>()
-                .join("|");
-            file.write(format!("{}\r\n", line).as_bytes()).unwrap();
-        });
-    }
-
-    {
-        let mut file = File::create("seg_defs.txt").unwrap();
-        file.write(format!("Entries: {}\n", seg_defs.len()).as_bytes())
-            .unwrap();
-        seg_defs.iter().for_each(|seg| {
-            let line = seg
-                .iter()
-                .map(|s| format!("{}", s))
-                .collect::<Vec<String>>()
-                .join(",");
-            file.write(format!("{}\r\n", line).as_bytes()).unwrap();
-        });
-    }
-
-    {
-        let mut conversion_table: Vec<(u16, u16)> =
-            conversion_table.into_iter().map(|v| v).collect();
-
-        conversion_table.sort_by(|(a1, b1), (a2, b2)| a1.cmp(a2));
-
-        let mut file = File::create("conversion_table.txt").unwrap();
-        file.write(format!("Entries: {}\n", conversion_table.len()).as_bytes())
-            .unwrap();
-        conversion_table.iter().for_each(|(a, b)| {
-            file.write(format!("{},{}\n", a, b).as_bytes()).unwrap();
-        });
-    }
-
-    {
-        let mut trans_defs = trans_defs;
-        trans_defs.sort_by(|td1, td2| td1.name.cmp(&td2.name));
-
-        let mut file = File::create("transdefs.txt").unwrap();
-        file.write(format!("Entries: {}\n", trans_defs.len()).as_bytes())
-            .unwrap();
-        trans_defs.iter().for_each(|td| {
-            file.write(format!("{}:{},{},{}\n", td.name, td.c1, td.c2, td.gate).as_bytes())
-                .unwrap();
-        });
-    }
-
-    {
-        let node_names: std::collections::BTreeSet<_> = node_names
-            .iter()
-            .map(|(k, v)| format!("{},{}", k, v))
-            .collect();
-
-        let mut file = File::create("node_names.txt").unwrap();
-        file.write(format!("Entries: {}\n", node_names.len()).as_bytes())
-            .unwrap();
-        node_names.iter().for_each(|l| {
-            file.write(format!("{}\n", l).as_bytes()).unwrap();
-        });
-    }
-
+    println!("conversion_table entries: {}", conversion_table.len());
+    println!("node_names entries: {}", node_names.len());
     println!("segdef entries: {}", seg_defs.len());
-    //println!("transdef entries: {}", trans_defs.len());
+    println!("transdef entries: {}", trans_defs.len());
     println!("palette_nodes entries: {}", palette_nodes.len());
     println!("sprite_nodes entries: {}", sprite_nodes.len());
     println!("nodes entries: {}", nodes.len());
