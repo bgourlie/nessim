@@ -1,6 +1,6 @@
 use fnv::FnvHashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Read};
 
 const EMPTYNODE: u16 = 65535;
 const CPU_OFFSET: u16 = 13000;
@@ -293,7 +293,7 @@ fn main() {
     let sprite_nodes = load_ppu_nodes(File::open("data/spritenodes.txt").unwrap());
     let nodes = setup_nodes(&seg_defs);
 
-    println!("conversion_table entries: {}", conversion_table.len());
+    println!("condversion_table entries: {}", conversion_table.len());
     println!("node_names entries: {}", node_names.len());
     println!("segdef entries: {}", seg_defs.len());
     println!("transdef entries: {}", trans_defs.len());
