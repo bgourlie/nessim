@@ -1,6 +1,6 @@
 use fnv::FnvHashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, Write};
 
 const EMPTYNODE: u16 = 65535;
 const CPU_OFFSET: u16 = 13000;
@@ -269,6 +269,14 @@ fn setup_transistors(
             node_c1_c2s[c1 as usize][node_count[c1 as usize] as usize] = i;
             node_count[c1 as usize] += 1;
             if node_count[c1 as usize] > max_count {
+                max_count = node_count[c2 as usize];
+            }
+        }
+
+        if c2 != NPWR && c2 != NGND {
+            node_c1_c2s[c2 as usize][node_count[c2 as usize] as usize] = i;
+            node_count[c2 as usize] += 1;
+            if node_count[c2 as usize] > max_count {
                 max_count = node_count[c2 as usize];
             }
         }
