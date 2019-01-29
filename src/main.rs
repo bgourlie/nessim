@@ -1,6 +1,6 @@
 use fnv::FnvHashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Read};
 
 const EMPTYNODE: u16 = 65535;
 const CPU_OFFSET: u16 = 13000;
@@ -148,6 +148,10 @@ fn load_transistor_definitions<R: Read>(
         .collect()
 }
 
+fn setup_node_names_by_number_map(node_names: &FnvHashMap<String, u16>) -> FnvHashMap<u16, String> {
+    node_names.iter().map(|(k, v)| (*v, k.clone())).collect()
+}
+
 fn load_node_names<R: Read>(
     reader: R,
     name_prefix: &'static str,
@@ -246,9 +250,7 @@ fn setup_transistors(
     let mut node_c1_c2s = vec![vec![0_u16; MAX_C1_C2]; MAX_NODES];
     let mut transistors = Vec::new();
     let mut transistor_index_by_name = FnvHashMap::<String, u16>::default();
-    let mut max_count = 0;
-    let mut i = 0;
-    for trans_def in trans_defs {
+    for (i, trans_def) in trans_defs.into_iter().enumerate() {
         let mut c1 = trans_def.c1;
         let mut c2 = trans_def.c2;
         let name = trans_def.name;
@@ -264,21 +266,15 @@ fn setup_transistors(
             c2 = NPWR;
         }
 
-        nodes[gate as usize].gates.push(i);
+        nodes[gate as usize].gates.push(i as u16);
         if c1 != NPWR && c1 != NGND {
-            node_c1_c2s[c1 as usize][node_count[c1 as usize] as usize] = i;
+            node_c1_c2s[c1 as usize][node_count[c1 as usize] as usize] = i as u16;
             node_count[c1 as usize] += 1;
-            if node_count[c1 as usize] > max_count {
-                max_count = node_count[c2 as usize];
-            }
         }
 
         if c2 != NPWR && c2 != NGND {
-            node_c1_c2s[c2 as usize][node_count[c2 as usize] as usize] = i;
+            node_c1_c2s[c2 as usize][node_count[c2 as usize] as usize] = i as u16;
             node_count[c2 as usize] += 1;
-            if node_count[c2 as usize] > max_count {
-                max_count = node_count[c2 as usize];
-            }
         }
 
         transistors.push(Transistor {
@@ -288,8 +284,7 @@ fn setup_transistors(
             on: false,
             name: name.clone(),
         });
-        transistor_index_by_name.insert(name, i);
-        i += 1;
+        transistor_index_by_name.insert(name, i as u16);
     }
 
     (
@@ -372,6 +367,8 @@ fn main() {
 
     let (transistors, node_count, node_c1_c2s, transistor_index_by_name) =
         setup_transistors(&mut nodes, trans_defs);
+
+    let node_names_by_number = setup_node_names_by_number_map(&node_names);
 
     println!("transistors entries: {}", transistors.len());
     println!("node_count entries: {}", node_count.len());
