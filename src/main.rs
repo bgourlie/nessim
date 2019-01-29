@@ -231,6 +231,67 @@ fn setup_nodes(segdefs: &[Vec<u16>]) -> Vec<Node> {
     nodes
 }
 
+fn setup_transistors(
+    nodes: &mut Vec<Node>,
+    trans_defs: Vec<TransistorDefinition>,
+) -> (
+    Vec<Transistor>,
+    Vec<u8>,
+    Vec<Vec<u16>>,
+    FnvHashMap<String, u16>,
+) {
+    const MAX_NODES: usize = 34000;
+    const MAX_C1_C2: usize = 95;
+    let mut node_count = vec![0_u8; MAX_NODES];
+    let mut node_c1_c2s = vec![vec![0_u16; MAX_C1_C2]; MAX_NODES];
+    let mut transistors = Vec::new();
+    let mut transistor_index_by_name = FnvHashMap::<String, u16>::default();
+    let mut max_count = 0;
+    let mut i = 0;
+    for trans_def in trans_defs {
+        let mut c1 = trans_def.c1;
+        let mut c2 = trans_def.c2;
+        let name = trans_def.name;
+        let gate = trans_def.gate;
+
+        if c1 == NGND {
+            c1 = c2;
+            c2 = NGND;
+        }
+
+        if c1 == NPWR {
+            c1 = c2;
+            c2 = NPWR;
+        }
+
+        nodes[gate as usize].gates.push(i);
+        if c1 != NPWR && c1 != NGND {
+            node_c1_c2s[c1 as usize][node_count[c1 as usize] as usize] = i;
+            node_count[c1 as usize] += 1;
+            if node_count[c1 as usize] > max_count {
+                max_count = node_count[c2 as usize];
+            }
+        }
+
+        transistors.push(Transistor {
+            c1,
+            c2,
+            gate,
+            on: false,
+            name: name.clone(),
+        });
+        transistor_index_by_name.insert(name, i);
+        i += 1;
+    }
+
+    (
+        transistors,
+        node_count,
+        node_c1_c2s,
+        transistor_index_by_name,
+    )
+}
+
 fn main() {
     let conversion_table = id_conversion_table();
     let seg_defs = {
@@ -291,13 +352,24 @@ fn main() {
 
     let palette_nodes = load_ppu_nodes(File::open("data/palettenodes.txt").unwrap());
     let sprite_nodes = load_ppu_nodes(File::open("data/spritenodes.txt").unwrap());
-    let nodes = setup_nodes(&seg_defs);
+    let mut nodes = setup_nodes(&seg_defs);
 
-    println!("condversion_table entries: {}", conversion_table.len());
+    println!("conversion_table entries: {}", conversion_table.len());
     println!("node_names entries: {}", node_names.len());
     println!("segdef entries: {}", seg_defs.len());
     println!("transdef entries: {}", trans_defs.len());
     println!("palette_nodes entries: {}", palette_nodes.len());
     println!("sprite_nodes entries: {}", sprite_nodes.len());
     println!("nodes entries: {}", nodes.len());
+
+    let (transistors, node_count, node_c1_c2s, transistor_index_by_name) =
+        setup_transistors(&mut nodes, trans_defs);
+
+    println!("transistors entries: {}", transistors.len());
+    println!("node_count entries: {}", node_count.len());
+    println!("node_c1_c2s entries: {}", node_c1_c2s.len());
+    println!(
+        "transistor_index_by_name entries: {}",
+        transistor_index_by_name.len()
+    );
 }
