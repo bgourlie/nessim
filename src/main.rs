@@ -49,14 +49,6 @@ impl Default for Node {
     }
 }
 
-struct DataDefinitions {
-    segdefs: Vec<Vec<i32>>,
-    transdefs: Vec<TransistorDefinition>,
-    nodenames: FnvHashMap<String, u16>,
-    pallete_nodes: Vec<Vec<(u16, u16)>>,
-    sprite_nodes: Vec<Vec<(u16, u16)>>,
-}
-
 pub fn id_conversion_table() -> FnvHashMap<u16, u16> {
     let mut map = FnvHashMap::default();
     map.insert(10000 + CPU_OFFSET, 1); // vcc
@@ -88,110 +80,170 @@ fn convert_id(id: u16, conversion_table: &FnvHashMap<u16, u16>) -> u16 {
     *conversion_table.get(&id).unwrap_or(&id)
 }
 
-fn load_segment_definitions<R: Read>(
-    reader: R,
-    segment_id_offset: u16,
-    conversion_table: &FnvHashMap<u16, u16>,
-) -> Vec<Vec<u16>> {
-    BufReader::new(reader)
-        .lines()
-        .map(|line| {
-            let values = line
-                .unwrap()
-                .split(',')
-                .map(|seg| seg.parse::<u16>().unwrap())
-                .collect::<Vec<u16>>();
+fn load_segment_definitions(conversion_table: &FnvHashMap<u16, u16>) -> Vec<Vec<u16>> {
+    fn load_from_file<R: Read>(
+        reader: R,
+        segment_id_offset: u16,
+        conversion_table: &FnvHashMap<u16, u16>,
+    ) -> Vec<Vec<u16>> {
+        BufReader::new(reader)
+            .lines()
+            .map(|line| {
+                let values = line
+                    .unwrap()
+                    .split(',')
+                    .map(|seg| seg.parse::<u16>().unwrap())
+                    .collect::<Vec<u16>>();
 
-            let mut seg_def = Vec::with_capacity(values.len());
+                let mut seg_def = Vec::with_capacity(values.len());
 
-            let id = values[0];
-            seg_def.push(convert_id(id + segment_id_offset, conversion_table));
-            if values.len() > 1 {
-                seg_def.extend_from_slice(&values[1..]);
-            }
+                let id = values[0];
+                seg_def.push(convert_id(id + segment_id_offset, conversion_table));
+                if values.len() > 1 {
+                    seg_def.extend_from_slice(&values[1..]);
+                }
 
-            seg_def
-        })
-        .collect::<Vec<Vec<u16>>>()
+                seg_def
+            })
+            .collect::<Vec<Vec<u16>>>()
+    }
+
+    let mut seg_defs = load_from_file(File::open("data/segdefs.txt").unwrap(), 0, conversion_table);
+
+    let cpu_seg_defs = load_from_file(
+        File::open("data/cpusegdefs.txt").unwrap(),
+        CPU_OFFSET,
+        conversion_table,
+    );
+
+    seg_defs.extend(cpu_seg_defs);
+    seg_defs
 }
-
-fn load_transistor_definitions<R: Read>(
-    reader: R,
-    name_prefix: &'static str,
-    segment_id_offset: u16,
+fn load_transistor_definitions(
     conversion_table: &FnvHashMap<u16, u16>,
 ) -> Vec<TransistorDefinition> {
-    BufReader::new(reader)
-        .lines()
-        .map(|line| {
-            let values = line
-                .unwrap()
-                .split(',')
-                .map(|val| val.to_owned())
-                .collect::<Vec<String>>();
-            TransistorDefinition {
-                name: format!("{}{}", name_prefix, values[0]),
-                gate: convert_id(
-                    values[1].parse::<u16>().unwrap() + segment_id_offset,
-                    conversion_table,
-                ),
-                c1: convert_id(
-                    values[2].parse::<u16>().unwrap() + segment_id_offset,
-                    conversion_table,
-                ),
-                c2: convert_id(
-                    values[3].parse::<u16>().unwrap() + segment_id_offset,
-                    conversion_table,
-                ),
-            }
-        })
-        .collect()
+    fn load_from_file<R: Read>(
+        reader: R,
+        name_prefix: &str,
+        segment_id_offset: u16,
+        conversion_table: &FnvHashMap<u16, u16>,
+    ) -> Vec<TransistorDefinition> {
+        BufReader::new(reader)
+            .lines()
+            .map(|line| {
+                let values = line
+                    .unwrap()
+                    .split(',')
+                    .map(|val| val.to_owned())
+                    .collect::<Vec<String>>();
+                TransistorDefinition {
+                    name: format!("{}{}", name_prefix, values[0]),
+                    gate: convert_id(
+                        values[1].parse::<u16>().unwrap() + segment_id_offset,
+                        conversion_table,
+                    ),
+                    c1: convert_id(
+                        values[2].parse::<u16>().unwrap() + segment_id_offset,
+                        conversion_table,
+                    ),
+                    c2: convert_id(
+                        values[3].parse::<u16>().unwrap() + segment_id_offset,
+                        conversion_table,
+                    ),
+                }
+            })
+            .collect()
+    }
+
+    let mut trans_defs = load_from_file(
+        File::open("data/transdefs.txt").unwrap(),
+        "",
+        0,
+        conversion_table,
+    );
+
+    let cpu_transistor_defs = load_from_file(
+        File::open("data/cputransdefs.txt").unwrap(),
+        "cpu_",
+        CPU_OFFSET,
+        conversion_table,
+    );
+
+    trans_defs.extend(cpu_transistor_defs);
+    trans_defs
 }
 
 fn setup_node_names_by_number_map(node_names: &FnvHashMap<String, u16>) -> FnvHashMap<u16, String> {
     node_names.iter().map(|(k, v)| (*v, k.clone())).collect()
 }
+//
+fn load_node_names(conversion_table: &FnvHashMap<u16, u16>) -> FnvHashMap<String, u16> {
+    fn load_from_file<R: Read>(
+        reader: R,
+        name_prefix: &str,
+        segment_id_offset: u16,
+        conversion_table: &FnvHashMap<u16, u16>,
+    ) -> FnvHashMap<String, u16> {
+        BufReader::new(reader)
+            .lines()
+            .map(|line| {
+                let values = line
+                    .unwrap()
+                    .split(',')
+                    .map(|s| s.trim().to_owned())
+                    .collect::<Vec<String>>();
 
-fn load_node_names<R: Read>(
-    reader: R,
-    name_prefix: &'static str,
-    segment_id_offset: u16,
-    conversion_table: &FnvHashMap<u16, u16>,
-) -> FnvHashMap<String, u16> {
-    BufReader::new(reader)
-        .lines()
-        .map(|line| {
-            let values = line
-                .unwrap()
-                .split(',')
-                .map(|s| s.trim().to_owned())
-                .collect::<Vec<String>>();
+                let id = (values[1].parse::<i64>().unwrap() + i64::from(segment_id_offset)) as u16;
+                (
+                    format!("{}{}", name_prefix, values[0]),
+                    convert_id(id, conversion_table),
+                )
+            })
+            .collect::<FnvHashMap<String, u16>>()
+    }
 
-            let id = (values[1].parse::<i64>().unwrap() + i64::from(segment_id_offset)) as u16;
-            (
-                format!("{}{}", name_prefix, values[0]),
-                convert_id(id, conversion_table),
-            )
-        })
-        .collect::<FnvHashMap<String, u16>>()
+    let mut node_names = load_from_file(
+        File::open("data/nodenames.txt").unwrap(),
+        "",
+        0,
+        conversion_table,
+    );
+
+    let cpu_node_names = load_from_file(
+        File::open("data/cpunodenames.txt").unwrap(),
+        "cpu_",
+        CPU_OFFSET,
+        conversion_table,
+    );
+
+    node_names.extend(cpu_node_names);
+
+    node_names
 }
 
-fn load_ppu_nodes<R: Read>(reader: R) -> Vec<Vec<(i32, i32)>> {
-    BufReader::new(reader)
-        .lines()
-        .map(|line| {
-            line.unwrap()
-                .split(',')
-                .map(|values| {
-                    let value = values.split('|').collect::<Vec<&str>>();
-                    (
-                        value[0].parse::<i32>().unwrap(),
-                        value[1].parse::<i32>().unwrap(),
-                    )
-                })
-                .collect::<Vec<(i32, i32)>>()
-        })
-        .collect()
+fn load_ppu_nodes() -> (Vec<Vec<(i32, i32)>>, Vec<Vec<(i32, i32)>>) {
+    fn load_from_file<R: Read>(reader: R) -> Vec<Vec<(i32, i32)>> {
+        BufReader::new(reader)
+            .lines()
+            .map(|line| {
+                line.unwrap()
+                    .split(',')
+                    .map(|values| {
+                        let value = values.split('|').collect::<Vec<&str>>();
+                        (
+                            value[0].parse::<i32>().unwrap(),
+                            value[1].parse::<i32>().unwrap(),
+                        )
+                    })
+                    .collect::<Vec<(i32, i32)>>()
+            })
+            .collect()
+    }
+
+    let palette_nodes = load_from_file(File::open("data/palettenodes.txt").unwrap());
+    let sprite_nodes = load_from_file(File::open("data/spritenodes.txt").unwrap());
+
+    (palette_nodes, sprite_nodes)
 }
 
 fn setup_nodes(segdefs: &[Vec<u16>]) -> Vec<Node> {
@@ -247,7 +299,7 @@ fn setup_transistors(
     const MAX_NODES: usize = 34000;
     const MAX_C1_C2: usize = 95;
     let mut node_count = vec![0_u8; MAX_NODES];
-    let mut node_c1_c2s = vec![vec![0_u16; MAX_C1_C2]; MAX_NODES];
+    let mut node_c1_c2 = vec![vec![0_u16; MAX_C1_C2]; MAX_NODES];
     let mut transistors = Vec::new();
     let mut transistor_index_by_name = FnvHashMap::<String, u16>::default();
     for (i, trans_def) in trans_defs.into_iter().enumerate() {
@@ -268,12 +320,12 @@ fn setup_transistors(
 
         nodes[gate as usize].gates.push(i as u16);
         if c1 != NPWR && c1 != NGND {
-            node_c1_c2s[c1 as usize][node_count[c1 as usize] as usize] = i as u16;
+            node_c1_c2[c1 as usize][node_count[c1 as usize] as usize] = i as u16;
             node_count[c1 as usize] += 1;
         }
 
         if c2 != NPWR && c2 != NGND {
-            node_c1_c2s[c2 as usize][node_count[c2 as usize] as usize] = i as u16;
+            node_c1_c2[c2 as usize][node_count[c2 as usize] as usize] = i as u16;
             node_count[c2 as usize] += 1;
         }
 
@@ -290,91 +342,261 @@ fn setup_transistors(
     (
         transistors,
         node_count,
-        node_c1_c2s,
+        node_c1_c2,
         transistor_index_by_name,
     )
 }
 
 fn main() {
-    let conversion_table = id_conversion_table();
-    let seg_defs = {
-        let mut seg_defs = load_segment_definitions(
-            File::open("data/segdefs.txt").unwrap(),
-            0,
-            &conversion_table,
-        );
+    println!("woot");
+}
 
-        let cpu_seg_defs = load_segment_definitions(
-            File::open("data/cpusegdefs.txt").unwrap(),
-            CPU_OFFSET,
-            &conversion_table,
-        );
+#[cfg(test)]
+mod tests {
+    use crate::*;
+    use std::{fmt::Write, fs::File};
 
-        seg_defs.extend(cpu_seg_defs);
-        seg_defs
-    };
+    fn string_from_zip(file: &str) -> String {
+        let reader = File::open(file).unwrap();
+        let mut zip = zip::ZipArchive::new(reader).unwrap();
+        let mut orig_file = zip.by_index(0).unwrap();
+        let mut reference_data = String::new();
+        orig_file.read_to_string(&mut reference_data).unwrap();
+        reference_data
+    }
 
-    let trans_defs = {
-        let mut trans_defs = load_transistor_definitions(
-            File::open("data/transdefs.txt").unwrap(),
-            "",
-            0,
-            &conversion_table,
-        );
+    #[test]
+    fn conversion_table_reference_test() {
+        let reference_data = string_from_zip("test_data/conversion_table_reference.zip");
+        let conversion_table = id_conversion_table();
+        let mut conversion_table: Vec<(u16, u16)> =
+            conversion_table.into_iter().map(|v| v).collect();
 
-        let cpu_transistor_defs = load_transistor_definitions(
-            File::open("data/cputransdefs.txt").unwrap(),
-            "cpu_",
-            CPU_OFFSET,
-            &conversion_table,
-        );
+        conversion_table.sort_by(|(a1, _), (a2, _)| a1.cmp(a2));
 
-        trans_defs.extend(cpu_transistor_defs);
-        trans_defs
-    };
+        let mut processed_data = String::new();
+        processed_data
+            .write_str(format!("Entries: {}\r\n", conversion_table.len()).as_str())
+            .unwrap();
+        conversion_table.iter().for_each(|(a, b)| {
+            processed_data
+                .write_str(format!("{},{}\r\n", a, b).as_str())
+                .unwrap();
+        });
+        assert_eq!(reference_data, processed_data);
+    }
 
-    let node_names = {
-        let mut node_names = load_node_names(
-            File::open("data/nodenames.txt").unwrap(),
-            "",
-            0,
-            &conversion_table,
-        );
+    #[test]
+    fn segment_definitions_reference_test() {
+        let reference_data = string_from_zip("test_data/segment_definitions_reference.zip");
+        let conversion_table = id_conversion_table();
+        let seg_defs = load_segment_definitions(&conversion_table);
+        let mut processed_data = String::new();
+        processed_data
+            .write_str(format!("Entries: {}\r\n", seg_defs.len()).as_str())
+            .unwrap();
 
-        let cpu_node_names = load_node_names(
-            File::open("data/cpunodenames.txt").unwrap(),
-            "cpu_",
-            CPU_OFFSET,
-            &conversion_table,
-        );
+        seg_defs.iter().for_each(|seg| {
+            let line = seg
+                .iter()
+                .map(|s| format!("{}", s))
+                .collect::<Vec<String>>()
+                .join(",");
+            processed_data
+                .write_str(format!("{}\r\n", line).as_str())
+                .unwrap();
+        });
+        assert_eq!(reference_data, processed_data);
+    }
 
-        node_names.extend(cpu_node_names);
+    #[test]
+    fn transistor_definition_reference_test() {
+        let reference_data = string_from_zip("test_data/transistor_definition_reference.zip");
+        let conversion_table = id_conversion_table();
+        let mut trans_defs = load_transistor_definitions(&conversion_table);
 
-        node_names
-    };
+        trans_defs.sort_by(|td1, td2| td1.name.cmp(&td2.name));
 
-    let palette_nodes = load_ppu_nodes(File::open("data/palettenodes.txt").unwrap());
-    let sprite_nodes = load_ppu_nodes(File::open("data/spritenodes.txt").unwrap());
-    let mut nodes = setup_nodes(&seg_defs);
+        let mut processed_data = String::new();
+        processed_data
+            .write_str(format!("Entries: {}\r\n", trans_defs.len()).as_str())
+            .unwrap();
+        trans_defs.iter().for_each(|td| {
+            processed_data
+                .write_str(format!("{}:{},{},{}\r\n", td.name, td.c1, td.c2, td.gate).as_str())
+                .unwrap();
+        });
+        assert_eq!(reference_data, processed_data);
+    }
 
-    println!("conversion_table entries: {}", conversion_table.len());
-    println!("node_names entries: {}", node_names.len());
-    println!("segdef entries: {}", seg_defs.len());
-    println!("transdef entries: {}", trans_defs.len());
-    println!("palette_nodes entries: {}", palette_nodes.len());
-    println!("sprite_nodes entries: {}", sprite_nodes.len());
-    println!("nodes entries: {}", nodes.len());
+    #[test]
+    fn node_names_reference_test() {
+        let reference_data = string_from_zip("test_data/node_names_reference.zip");
+        let conversion_table = id_conversion_table();
+        let node_names: std::collections::BTreeSet<_> = load_node_names(&conversion_table)
+            .iter()
+            .map(|(k, v)| format!("{},{}", k, v))
+            .collect();
 
-    let (transistors, node_count, node_c1_c2s, transistor_index_by_name) =
-        setup_transistors(&mut nodes, trans_defs);
+        let mut processed_data = String::new();
+        processed_data
+            .write_str(format!("Entries: {}\r\n", node_names.len()).as_str())
+            .unwrap();
+        node_names.iter().for_each(|l| {
+            processed_data
+                .write_str(format!("{}\r\n", l).as_str())
+                .unwrap();
+        });
+        assert_eq!(reference_data, processed_data);
+    }
 
-    let node_names_by_number = setup_node_names_by_number_map(&node_names);
+    #[test]
+    fn sprite_nodes_reference_test() {
+        let reference_data = string_from_zip("test_data/sprite_nodes_reference.zip");
+        let (_, sprite_nodes) = load_ppu_nodes();
 
-    println!("transistors entries: {}", transistors.len());
-    println!("node_count entries: {}", node_count.len());
-    println!("node_c1_c2s entries: {}", node_c1_c2s.len());
-    println!(
-        "transistor_index_by_name entries: {}",
-        transistor_index_by_name.len()
-    );
+        let mut processed_data = String::new();
+        processed_data
+            .write_str(format!("Entries: {}\r\n", sprite_nodes.len()).as_str())
+            .unwrap();
+        sprite_nodes.iter().for_each(|seg| {
+            let line = seg
+                .iter()
+                .map(|(i, j)| format!("{},{}", i, j))
+                .collect::<Vec<String>>()
+                .join("|");
+            processed_data
+                .write_str(format!("{}\r\n", line).as_str())
+                .unwrap();
+        });
+        assert_eq!(reference_data, processed_data);
+    }
+
+    #[test]
+    fn palette_nodes_reference_test() {
+        let reference_data = string_from_zip("test_data/palette_nodes_reference.zip");
+        let (palette_nodes, _) = load_ppu_nodes();
+
+        let mut processed_data = String::new();
+        processed_data
+            .write_str(format!("Entries: {}\r\n", palette_nodes.len()).as_str())
+            .unwrap();
+        palette_nodes.iter().for_each(|seg| {
+            let line = seg
+                .iter()
+                .map(|(i, j)| format!("{},{}", i, j))
+                .collect::<Vec<String>>()
+                .join("|");
+            processed_data
+                .write_str(format!("{}\r\n", line).as_str())
+                .unwrap();
+        });
+        assert_eq!(reference_data, processed_data);
+    }
+
+    #[test]
+    fn transistors_reference_test() {
+        let reference_data = string_from_zip("test_data/transistors_reference.zip");
+        let conversion_table = id_conversion_table();
+        let seg_defs = load_segment_definitions(&conversion_table);
+        let trans_defs = load_transistor_definitions(&conversion_table);
+        let mut nodes = setup_nodes(&seg_defs);
+
+        let (transistors, _, _, _) = setup_transistors(&mut nodes, trans_defs);
+
+        let mut processed_data = String::new();
+        processed_data
+            .write_str(format!("Entries: {}\r\n", transistors.len()).as_str())
+            .unwrap();
+        transistors.iter().for_each(|trans| {
+            processed_data
+                .write_str(
+                    format!(
+                        "{},{},{},{},{}\r\n",
+                        trans.name,
+                        trans.c1,
+                        trans.c2,
+                        trans.gate,
+                        if trans.on { 1 } else { 0 }
+                    )
+                    .as_str(),
+                )
+                .unwrap();
+        });
+        assert_eq!(reference_data, processed_data);
+    }
+
+    #[test]
+    fn node_counts_reference_test() {
+        let reference_data = string_from_zip("test_data/node_counts_reference.zip");
+        let conversion_table = id_conversion_table();
+        let seg_defs = load_segment_definitions(&conversion_table);
+        let trans_defs = load_transistor_definitions(&conversion_table);
+        let mut nodes = setup_nodes(&seg_defs);
+
+        let (_, node_counts, _, _) = setup_transistors(&mut nodes, trans_defs);
+
+        let mut processed_data = String::new();
+        processed_data
+            .write_str(format!("Entries: {}\r\n", node_counts.len()).as_str())
+            .unwrap();
+        node_counts.iter().for_each(|node| {
+            processed_data
+                .write_str(format!("{}\r\n", node).as_str())
+                .unwrap();
+        });
+        assert_eq!(reference_data, processed_data);
+    }
+
+    #[test]
+    fn nodes_c1_c2_reference_test() {
+        let reference_data = string_from_zip("test_data/nodes_c1_c2_reference.zip");
+        let conversion_table = id_conversion_table();
+        let seg_defs = load_segment_definitions(&conversion_table);
+        let trans_defs = load_transistor_definitions(&conversion_table);
+        let mut nodes = setup_nodes(&seg_defs);
+        let (_, _, nodes_c1_c2, _) = setup_transistors(&mut nodes, trans_defs);
+
+        let mut processed_data = String::new();
+        processed_data
+            .write_str(format!("Entries: {}\r\n", nodes_c1_c2.len()).as_str())
+            .unwrap();
+        for nodes in nodes_c1_c2 {
+            let line = nodes
+                .iter()
+                .map(|n| format!("{}", n))
+                .collect::<Vec<String>>()
+                .join(",");
+            processed_data
+                .write_str(format!("{}\r\n", line).as_str())
+                .unwrap();
+        }
+        assert_eq!(reference_data, processed_data);
+    }
+
+    #[test]
+    fn transistor_index_by_name_reference_test() {
+        let reference_data = string_from_zip("test_data/transistor_index_by_name_reference.zip");
+        let conversion_table = id_conversion_table();
+        let seg_defs = load_segment_definitions(&conversion_table);
+        let trans_defs = load_transistor_definitions(&conversion_table);
+        let mut nodes = setup_nodes(&seg_defs);
+        let (_, _, _, transistor_index_by_name) = setup_transistors(&mut nodes, trans_defs);
+
+        let mut transistor_index_by_name: Vec<(String, u16)> =
+            transistor_index_by_name.into_iter().map(|v| v).collect();
+
+        transistor_index_by_name.sort_by(|(a1, _b1), (a2, _b2)| a1.cmp(a2));
+
+        let mut processed_data = String::new();
+        processed_data
+            .write_str(format!("Entries: {}\r\n", transistor_index_by_name.len()).as_str())
+            .unwrap();
+        transistor_index_by_name.iter().for_each(|(a, b)| {
+            processed_data
+                .write_str(format!("{},{}\r\n", a, b).as_str())
+                .unwrap();
+        });
+        assert_eq!(reference_data, processed_data);
+    }
 }
