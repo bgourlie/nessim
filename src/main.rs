@@ -280,7 +280,7 @@ fn setup_nodes(segdefs: &[Vec<u16>]) -> Vec<Node> {
                 - i64::from(seg[j + 2]) * i64::from(seg[j - 1]);
             j += 2;
         }
-        // TODO: area will overflow here if using i32, is this a bug in the C++ source?
+
         nodes[w_idx].area += area.abs();
         nodes[w_idx].segs.push((seg[3], *seg.last().unwrap()))
     }
