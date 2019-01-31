@@ -7,6 +7,38 @@ const CPU_OFFSET: u16 = 13000;
 const NGND: u16 = 2;
 const NPWR: u16 = 1;
 
+pub struct SimulationState<'a> {
+    half_steps: u64,
+    nodes: Vec<Node>,
+    cpu_clk0_index: usize,
+    clk0_index: usize,
+}
+
+impl<'a> SimulationState<'a> {
+    pub fn new(nodes: Vec<Node>, node_name_to_index_map: &FnvHashMap<String, u16>) -> Self {
+        let cpu_clk0_index = node_name_to_index_map["cpu_clk0"] as usize;
+        let clk0_index = node_name_to_index_map["clk0"] as usize;
+        SimulationState {
+            half_steps: 0,
+            nodes,
+            cpu_clk0_index,
+            clk0_index,
+        }
+    }
+
+    pub fn set_high(&mut self, node_index: usize) {
+        self.nodes[self.clk0_index].pullup = true;
+        self.nodes[self.clk0_index].pulldown = false;
+//        recalcNodeList(shared_ptr<vector<uint16_t>>(new vector<uint16_t>{ nn }));
+    }
+
+    pub fn set_low(&mut self, node_index: usize) {
+        self.nodes[self.clk0_index].pullup = false;
+        self.nodes[self.clk0_index].pulldown = true;
+//        recalcNodeList(shared_ptr<vector<uint16_t>>(new vector<uint16_t>{ nn }));
+    }
+}
+
 pub struct TransistorDefinition {
     name: String,
     gate: u16,
