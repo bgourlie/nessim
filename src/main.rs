@@ -2,6 +2,7 @@ use fnv::FnvHashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 
+const NUM_NODES: usize = 33001;
 const EMPTYNODE: u16 = 65535;
 const CPU_OFFSET: u16 = 13000;
 const NGND: u16 = 2;
@@ -10,32 +11,234 @@ const NPWR: u16 = 1;
 pub struct SimulationState {
     half_steps: u64,
     nodes: Vec<Node>,
-    cpu_clk0_index: usize,
-    clk0_index: usize,
+    node_number_by_name_map: FnvHashMap<String, u16>,
+    has_ground: bool,
+    has_power: bool,
+    group: Vec<u16>,
+    node_counts: Vec<u8>,
+    transistors: Vec<Transistor>,
+    nodes_c1_c2: Vec<Vec<u16>>,
+    processed_nodes: Vec<u16>,
+    recalc_lists: [Vec<u16>; 2],
+    cur_recalc_list_index: u8,
+    group_empty: bool,
 }
 
 impl SimulationState {
-    pub fn new(nodes: Vec<Node>, node_name_to_index_map: &FnvHashMap<String, u16>) -> Self {
-        let cpu_clk0_index = node_name_to_index_map["cpu_clk0"] as usize;
-        let clk0_index = node_name_to_index_map["clk0"] as usize;
+    pub fn new(
+        nodes: Vec<Node>,
+        node_counts: Vec<u8>,
+        node_number_by_name_map: FnvHashMap<String, u16>,
+        nodes_c1_c2: Vec<Vec<u16>>,
+        transistors: Vec<Transistor>,
+    ) -> Self {
         SimulationState {
             half_steps: 0,
             nodes,
-            cpu_clk0_index,
-            clk0_index,
+            node_number_by_name_map,
+            node_counts,
+            has_ground: false,
+            has_power: false,
+            group: Vec::new(),
+            transistors,
+            nodes_c1_c2,
+            processed_nodes: Vec::new(),
+            recalc_lists: [Vec::new(), Vec::new()],
+            cur_recalc_list_index: 0,
+            group_empty: true,
         }
     }
 
-    pub fn set_high(&mut self, node_index: usize) {
-        self.nodes[self.clk0_index].pullup = true;
-        self.nodes[self.clk0_index].pulldown = false;
-        //        recalcNodeList(shared_ptr<vector<uint16_t>>(new vector<uint16_t>{ nn }));
+    #[allow(unused_variables, unused_mut)]
+    fn recalc_node_list(&mut self, mut recalc_list: &mut Vec<u16>) {
+        unimplemented!()
+        //        if self.processed_nodes.is_empty() {
+        //            self.processed_nodes
+        //                .extend_from_slice(&[0; NUM_NODES]);
+        //            self.recalc_lists[0] = vec![100; 0];
+        //            self.recalc_lists[1] = vec![100; 0];
+        //        } else {
+        //            self.recalc_lists[0].clear();
+        //        }
+        //
+        //        self.cur_recalc_list_index = 0;
+        //
+        //        for j in 0..100 {
+        //            if j == 99 {
+        //                panic!("Maximum loop exceeded")
+        //            }
+        //
+        //            for node_number in recalc_list {
+        //                self.recalc_node(*node_number);
+        //            }
+        //
+        //            if self.group_empty {
+        //                return;
+        //            }
+        //
+        //            for node_number in self.recalc_lists[self.cur_recalc_list_index as usize] {
+        //                self.processed_nodes[node_number as usize] = 0;
+        //            }
+        //
+        //            recalc_list = &mut self.recalc_lists[self.cur_recalc_list_index as usize];
+        //            self.cur_recalc_list_index = if self.cur_recalc_list_index == 0 {
+        //                1
+        //            } else {
+        //                0
+        //            };
+        //
+        //            self.recalc_lists[self.cur_recalc_list_index as usize].clear();
+        //            self.group_empty = true;
+        //        }
     }
 
-    pub fn set_low(&mut self, node_index: usize) {
-        self.nodes[self.clk0_index].pullup = false;
-        self.nodes[self.clk0_index].pulldown = true;
-        //        recalcNodeList(shared_ptr<vector<uint16_t>>(new vector<uint16_t>{ nn }));
+    fn set_high(&mut self, node_name: &str) {
+        let node_number = self.node_number_by_name_map[node_name];
+        self.nodes[node_number as usize].pullup = true;
+        self.nodes[node_number as usize].pulldown = false;
+        self.recalc_node_list(&mut vec![node_number])
+    }
+
+    fn set_low(&mut self, node_name: &str) {
+        let node_number = self.node_number_by_name_map[node_name];
+        self.nodes[node_number as usize].pullup = false;
+        self.nodes[node_number as usize].pulldown = true;
+        self.recalc_node_list(&mut vec![node_number])
+    }
+
+    fn recalc_node(&mut self, node_number: u16) {
+        if node_number == NGND || node_number == NPWR {
+            return;
+        }
+
+        self.get_node_group(node_number);
+        let new_state = self.get_node_value();
+
+        for node_number in &self.group {
+            let mut node = &mut self.nodes[*node_number as usize];
+            if node.state != new_state {
+                node.state = new_state;
+                for i in &node.gates {
+                    if node.state {
+                        self.turn_transistor_on(*i);
+                    } else {
+                        self.turn_transistor_off(*i);
+                    }
+                }
+            }
+        }
+    }
+
+    fn turn_transistor_on(&mut self, i: u16) {
+        let transistor = &mut self.transistors[i as usize];
+        if !transistor.on {
+            transistor.on = true;
+            self.add_recalc_node(transistor.c1);
+        }
+    }
+
+    fn turn_transistor_off(&mut self, i: u16) {
+        let transistor = &mut self.transistors[i as usize];
+        if transistor.on {
+            transistor.on = false;
+            self.add_recalc_node(transistor.c1);
+            self.add_recalc_node(transistor.c2);
+        }
+    }
+
+    fn add_recalc_node(&mut self, node_number: u16) {
+        if node_number == NGND || node_number == NPWR {
+            return;
+        }
+
+        if self.processed_nodes[node_number as usize] == 0 {
+            self.recalc_lists[self.cur_recalc_list_index as usize].push(node_number);
+            self.processed_nodes[node_number as usize] = 1;
+        }
+
+        self.group_empty = false;
+    }
+
+    fn get_node_value(&mut self) -> bool {
+        if self.has_ground && self.has_power {
+            for i in &self.group {
+                let i = *i;
+                if i == 359
+                    || i == 566
+                    || i == 691
+                    || i == 871
+                    || i == 870
+                    || i == 864
+                    || i == 856
+                    || i == 818
+                {
+                    self.has_ground = false;
+                    self.has_power = false;
+                    break;
+                }
+            }
+        }
+
+        if self.has_ground {
+            false
+        } else if self.has_power {
+            true
+        } else {
+            let mut hi_area = 0_i64;
+            let mut lo_area = 0_i64;
+            for node_number in &self.group {
+                let node = &self.nodes[*node_number as usize];
+                if node.pullup {
+                    return true;
+                } else if node.pulldown {
+                    return false;
+                } else if node.state {
+                    hi_area += node.area
+                } else {
+                    lo_area += node.area
+                }
+            }
+
+            hi_area > lo_area
+        }
+    }
+
+    fn get_node_group(&mut self, node_number: u16) {
+        self.has_ground = false;
+        self.has_power = false;
+        self.group.clear();
+        self.add_node_to_group(node_number);
+    }
+
+    fn add_node_to_group(&mut self, node_number: u16) {
+        if node_number == NGND {
+            self.has_ground = true;
+            return;
+        }
+
+        if node_number == NPWR {
+            self.has_power = true;
+            return;
+        }
+
+        if self.group.contains(&node_number) {
+            return;
+        }
+
+        self.group.push(node_number);
+
+        for i in 0..(self.node_counts[node_number as usize] as usize) {
+            let transistor_index = self.nodes_c1_c2[node_number as usize][i] as usize;
+            let transistor = &self.transistors[transistor_index];
+            if transistor.on {
+                let node_to_add = if transistor.c1 == node_number {
+                    transistor.c2
+                } else {
+                    transistor.c1
+                };
+                self.add_node_to_group(node_to_add);
+            }
+        }
     }
 }
 
@@ -208,8 +411,10 @@ fn load_transistor_definitions(
 fn setup_node_names_by_number_map(node_names: &FnvHashMap<String, u16>) -> FnvHashMap<u16, String> {
     node_names.iter().map(|(k, v)| (*v, k.clone())).collect()
 }
-//
-fn load_node_names(conversion_table: &FnvHashMap<u16, u16>) -> FnvHashMap<String, u16> {
+
+fn load_node_number_by_name_map(
+    conversion_table: &FnvHashMap<u16, u16>,
+) -> FnvHashMap<String, u16> {
     fn load_from_file<R: Read>(
         reader: R,
         name_prefix: &str,
@@ -330,8 +535,8 @@ fn setup_transistors(
 ) {
     const MAX_NODES: usize = 34000;
     const MAX_C1_C2: usize = 95;
-    let mut node_count = vec![0_u8; MAX_NODES];
-    let mut node_c1_c2 = vec![vec![0_u16; MAX_C1_C2]; MAX_NODES];
+    let mut node_counts = vec![0_u8; MAX_NODES];
+    let mut nodes_c1_c2 = vec![vec![0_u16; MAX_C1_C2]; MAX_NODES];
     let mut transistors = Vec::new();
     let mut transistor_index_by_name = FnvHashMap::<String, u16>::default();
     for (i, trans_def) in trans_defs.into_iter().enumerate() {
@@ -352,13 +557,13 @@ fn setup_transistors(
 
         nodes[gate as usize].gates.push(i as u16);
         if c1 != NPWR && c1 != NGND {
-            node_c1_c2[c1 as usize][node_count[c1 as usize] as usize] = i as u16;
-            node_count[c1 as usize] += 1;
+            nodes_c1_c2[c1 as usize][node_counts[c1 as usize] as usize] = i as u16;
+            node_counts[c1 as usize] += 1;
         }
 
         if c2 != NPWR && c2 != NGND {
-            node_c1_c2[c2 as usize][node_count[c2 as usize] as usize] = i as u16;
-            node_count[c2 as usize] += 1;
+            nodes_c1_c2[c2 as usize][node_counts[c2 as usize] as usize] = i as u16;
+            node_counts[c2 as usize] += 1;
         }
 
         transistors.push(Transistor {
@@ -373,8 +578,8 @@ fn setup_transistors(
 
     (
         transistors,
-        node_count,
-        node_c1_c2,
+        node_counts,
+        nodes_c1_c2,
         transistor_index_by_name,
     )
 }
@@ -465,10 +670,11 @@ mod tests {
     fn node_names_reference_test() {
         let reference_data = string_from_zip("test_data/node_names_reference.zip");
         let conversion_table = id_conversion_table();
-        let node_names: std::collections::BTreeSet<_> = load_node_names(&conversion_table)
-            .iter()
-            .map(|(k, v)| format!("{},{}", k, v))
-            .collect();
+        let node_names: std::collections::BTreeSet<_> =
+            load_node_number_by_name_map(&conversion_table)
+                .iter()
+                .map(|(k, v)| format!("{},{}", k, v))
+                .collect();
 
         let mut processed_data = String::new();
         processed_data
@@ -630,5 +836,14 @@ mod tests {
                 .unwrap();
         });
         assert_eq!(reference_data, processed_data);
+    }
+
+    #[test]
+    fn node_names_length_constant_test() {
+        // Ensure that the NUM_NODES constant always reflects the number of processed nodes.
+        let conversion_table = id_conversion_table();
+        let seg_defs = load_segment_definitions(&conversion_table);
+        let nodes = setup_nodes(&seg_defs);
+        assert_eq!(nodes.len(), NUM_NODES);
     }
 }
