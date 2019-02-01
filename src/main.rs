@@ -1,6 +1,9 @@
 use fnv::FnvHashMap;
-use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
+use std;
+use std::{
+    fs::File,
+    io::{BufRead, BufReader, Read},
+};
 
 const NUM_NODES: usize = 33001;
 const EMPTYNODE: u16 = 65535;
@@ -19,7 +22,7 @@ pub struct SimulationState {
     transistors: Vec<Transistor>,
     nodes_c1_c2: Vec<Vec<u16>>,
     processed_nodes: Vec<u16>,
-    recalc_lists: [Vec<u16>; 2],
+    recalc_lists: [Option<Vec<u16>>; 2],
     cur_recalc_list_index: u8,
     group_empty: bool,
 }
@@ -43,67 +46,71 @@ impl SimulationState {
             transistors,
             nodes_c1_c2,
             processed_nodes: Vec::new(),
-            recalc_lists: [Vec::new(), Vec::new()],
+            recalc_lists: [None, None],
             cur_recalc_list_index: 0,
             group_empty: true,
         }
     }
 
-    #[allow(unused_variables, unused_mut)]
-    fn recalc_node_list(&mut self, mut recalc_list: &mut Vec<u16>) {
-        unimplemented!()
-        //        if self.processed_nodes.is_empty() {
-        //            self.processed_nodes
-        //                .extend_from_slice(&[0; NUM_NODES]);
-        //            self.recalc_lists[0] = vec![100; 0];
-        //            self.recalc_lists[1] = vec![100; 0];
-        //        } else {
-        //            self.recalc_lists[0].clear();
-        //        }
-        //
-        //        self.cur_recalc_list_index = 0;
-        //
-        //        for j in 0..100 {
-        //            if j == 99 {
-        //                panic!("Maximum loop exceeded")
-        //            }
-        //
-        //            for node_number in recalc_list {
-        //                self.recalc_node(*node_number);
-        //            }
-        //
-        //            if self.group_empty {
-        //                return;
-        //            }
-        //
-        //            for node_number in self.recalc_lists[self.cur_recalc_list_index as usize] {
-        //                self.processed_nodes[node_number as usize] = 0;
-        //            }
-        //
-        //            recalc_list = &mut self.recalc_lists[self.cur_recalc_list_index as usize];
-        //            self.cur_recalc_list_index = if self.cur_recalc_list_index == 0 {
-        //                1
-        //            } else {
-        //                0
-        //            };
-        //
-        //            self.recalc_lists[self.cur_recalc_list_index as usize].clear();
-        //            self.group_empty = true;
-        //        }
+    fn recalc_node_list(&mut self, mut recalc_list: Option<Vec<u16>>) {
+        if self.processed_nodes.is_empty() {
+            self.processed_nodes.extend_from_slice(&[0; NUM_NODES]);
+            self.recalc_lists[0] = Some(vec![100; 0]);
+            self.recalc_lists[1] = Some(vec![100; 0]);
+        } else {
+            self.recalc_lists[0].take();
+        }
+
+        self.cur_recalc_list_index = 0;
+
+        for j in 0..100 {
+            if j == 99 {
+                panic!("Maximum loop exceeded")
+            }
+
+            for node_number in recalc_list.take().unwrap() {
+                self.recalc_node(node_number);
+            }
+
+            if self.group_empty {
+                return;
+            }
+
+            for node_number in self.recalc_lists[self.cur_recalc_list_index as usize]
+                .as_ref()
+                .unwrap()
+            {
+                self.processed_nodes[*node_number as usize] = 0;
+            }
+
+            recalc_list = Some(
+                self.recalc_lists[self.cur_recalc_list_index as usize]
+                    .take()
+                    .unwrap(),
+            );
+            self.cur_recalc_list_index = if self.cur_recalc_list_index == 0 {
+                1
+            } else {
+                0
+            };
+
+            self.recalc_lists[self.cur_recalc_list_index as usize].take();
+            self.group_empty = true;
+        }
     }
 
     fn set_high(&mut self, node_name: &str) {
         let node_number = self.node_number_by_name_map[node_name];
         self.nodes[node_number as usize].pullup = true;
         self.nodes[node_number as usize].pulldown = false;
-        self.recalc_node_list(&mut vec![node_number])
+        self.recalc_node_list(Some(vec![node_number]))
     }
 
     fn set_low(&mut self, node_name: &str) {
         let node_number = self.node_number_by_name_map[node_name];
         self.nodes[node_number as usize].pullup = false;
         self.nodes[node_number as usize].pulldown = true;
-        self.recalc_node_list(&mut vec![node_number])
+        self.recalc_node_list(Some(vec![node_number]))
     }
 
     fn recalc_node(&mut self, node_number: u16) {
@@ -114,15 +121,18 @@ impl SimulationState {
         self.get_node_group(node_number);
         let new_state = self.get_node_value();
 
-        for node_number in &self.group {
-            let mut node = &mut self.nodes[*node_number as usize];
-            if node.state != new_state {
-                node.state = new_state;
-                for i in &node.gates {
-                    if node.state {
-                        self.turn_transistor_on(*i);
+        // TODO(perf): Get rid of clone
+        for node_number in self.group.clone() {
+            let node_number = node_number as usize;
+            if self.nodes[node_number].state != new_state {
+                self.nodes[node_number].state = new_state;
+                // TODO(perf): Get rid of clone
+                for i in self.nodes[node_number].gates.clone() {
+                    // TODO(perf): Get rid of clone
+                    if self.nodes[node_number].state.clone() {
+                        self.turn_transistor_on(i);
                     } else {
-                        self.turn_transistor_off(*i);
+                        self.turn_transistor_off(i);
                     }
                 }
             }
@@ -130,19 +140,19 @@ impl SimulationState {
     }
 
     fn turn_transistor_on(&mut self, i: u16) {
-        let transistor = &mut self.transistors[i as usize];
-        if !transistor.on {
-            transistor.on = true;
-            self.add_recalc_node(transistor.c1);
+        let i = i as usize;
+        if !self.transistors[i].on {
+            self.transistors[i].on = true;
+            self.add_recalc_node(self.transistors[i].c1);
         }
     }
 
     fn turn_transistor_off(&mut self, i: u16) {
-        let transistor = &mut self.transistors[i as usize];
-        if transistor.on {
-            transistor.on = false;
-            self.add_recalc_node(transistor.c1);
-            self.add_recalc_node(transistor.c2);
+        let i = i as usize;
+        if self.transistors[i].on {
+            self.transistors[i].on = false;
+            self.add_recalc_node(self.transistors[i].c1);
+            self.add_recalc_node(self.transistors[i].c2);
         }
     }
 
@@ -152,7 +162,10 @@ impl SimulationState {
         }
 
         if self.processed_nodes[node_number as usize] == 0 {
-            self.recalc_lists[self.cur_recalc_list_index as usize].push(node_number);
+            self.recalc_lists[self.cur_recalc_list_index as usize]
+                .as_mut()
+                .unwrap()
+                .push(node_number);
             self.processed_nodes[node_number as usize] = 1;
         }
 
