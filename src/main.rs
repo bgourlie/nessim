@@ -12,9 +12,13 @@ const EMPTYNODE: u16 = 65535;
 const CPU_OFFSET: u16 = 13000;
 const NGND: u16 = 2;
 const NPWR: u16 = 1;
+const NUMBERS: [&str; 32] = [
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
+    "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
+];
 
 pub struct SimulationState {
-    cycles: u64,
+    cycle: u16,
     nodes: Vec<Node>,
     node_number_by_name: FnvHashMap<String, u16>,
     has_ground: bool,
@@ -28,6 +32,12 @@ pub struct SimulationState {
     cur_recalc_list_index: u8,
     group_empty: bool,
     step_cycle_count: u8,
+    prev_ppu_ale: bool,
+    prev_ppu_write: bool,
+    prev_ppu_read: bool,
+    chr_address: u16,
+    node_number_cache: FnvHashMap<String, Vec<u16>>,
+    bit_count_cache: FnvHashMap<String, u8>,
 }
 
 impl SimulationState {
@@ -39,7 +49,7 @@ impl SimulationState {
         transistors: Vec<Transistor>,
     ) -> Self {
         SimulationState {
-            cycles: 0,
+            cycle: 0,
             nodes,
             node_number_by_name,
             node_counts,
@@ -53,6 +63,12 @@ impl SimulationState {
             cur_recalc_list_index: 0,
             group_empty: true,
             step_cycle_count: 0,
+            prev_ppu_ale: false,
+            prev_ppu_read: true,
+            prev_ppu_write: true,
+            chr_address: 0,
+            node_number_cache: FnvHashMap::default(),
+            bit_count_cache: FnvHashMap::default(),
         }
     }
 
@@ -83,7 +99,7 @@ impl SimulationState {
         // self.handle_chr_bus();
         // ...
 
-        self.cycles += 1;
+        self.cycle += 1;
     }
 
     fn is_node_high(&self, node_number: u16) -> bool {
@@ -175,6 +191,105 @@ impl SimulationState {
             }
         }
     }
+
+    fn read_bits(&mut self, name: &str, mut n: u8) -> u16 {
+        if name == "cycle" {
+            self.cycle >> 1
+        } else {
+            let mut res = 0_u16;
+            if n == 0 {
+                let last_char = name.chars().last().unwrap();
+                if last_char >= '0' && last_char <= '9' {
+                    return u16::from(self.read_bit(name));
+                } else {
+                    if let Some(bit_count) = self.bit_count_cache.get(name) {
+                        n = *bit_count;
+                    } else {
+                        self.node_number_cache.insert(name.to_owned(), Vec::new());
+                        while self
+                            .node_number_by_name
+                            .contains_key(format!("{}{}", name, NUMBERS[n as usize]).as_str())
+                        {
+                            self.node_number_cache.get_mut(name).unwrap().push(
+                                self.node_number_by_name
+                                    [format!("{}{}", name, NUMBERS[n as usize]).as_str()],
+                            );
+                            n += 1;
+                        }
+
+                        self.bit_count_cache.insert(name.to_owned(), n);
+                        if n == 0 && self.node_number_by_name.contains_key(name) {
+                            self.bit_count_cache.insert(name.to_owned(), 1);
+                        }
+                    }
+
+                    if n == 1 {
+                        return u16::from(self.read_bit(name));
+                    }
+                }
+                for (i, nn) in self.node_number_cache[name].iter().enumerate() {
+                    res += if self.is_node_high(*nn) { 1 } else { 0 } << i;
+                }
+            } else {
+                for i in 0..n {
+                    let nn = self.node_number_by_name
+                        [format!("{}{}", name, NUMBERS[i as usize]).as_str()];
+                    res += (if self.is_node_high(nn) { 1 } else { 0 }) << i;
+                }
+            }
+            res
+        }
+    }
+
+    fn read_bit(&self, name: &str) -> u8 {
+        self.is_node_high(self.node_number_by_name[name]) as u8
+    }
+
+    fn handle_chr_bus(&mut self) {
+        let ale = self.is_node_high(self.node_number_by_name["ale"]);
+        let rd = self.is_node_high(self.node_number_by_name["rd"]);
+        let wr = self.is_node_high(self.node_number_by_name["wr"]);
+
+        // rising edge of ALE
+        if self.prev_ppu_ale && ale {
+            //self.chr_address = self.read_ppu_address_bus();
+        }
+        // TODO:
+        // ...
+    }
+    /*
+    void handleChrBus() { /
+        bool ale = isNodeHigh(nodenames["ale"]);
+        bool rd = isNodeHigh(nodenames["rd"]);
+        bool wr = isNodeHigh(nodenames["wr"]);
+
+        // rising edge of ALE
+        if(!prevPpuAle && ale) {
+            chrAddress = readPpuAddressBus();
+        }
+        // falling edge of /RD - put bits on bus
+        if(prevPpuRd && !rd) {
+            /*var d = eval(readTriggers[a]);*/
+    //if(d == undefined) {
+    writeBits("db", 8, mPpuRead(chrAddress));
+    }
+    // rising edge of /RD - float the data bus
+    if(!prevPpuRd && rd) {
+    floatBits("db", 8);
+    }
+    // rising edge of /WR - store data in RAM
+    if(!prevPpuWr && wr) {
+    //eval(writeTriggers[a]);
+    mPpuWrite(chrAddress, readPpuDataBus());
+    }
+
+    readPpuDataBus();
+
+    prevPpuAle = ale;
+    prevPpuRd = rd;
+    prevPpuWr = wr;
+    }
+     */
 
     fn turn_transistor_on(&mut self, i: u16) {
         let i = i as usize;
@@ -508,6 +623,7 @@ fn load_node_number_by_name_map(
     node_names
 }
 
+#[allow(clippy::type_complexity)]
 fn load_ppu_nodes() -> (Vec<Vec<(i32, i32)>>, Vec<Vec<(i32, i32)>>) {
     fn load_from_file<R: Read>(reader: R) -> Vec<Vec<(i32, i32)>> {
         BufReader::new(reader)
@@ -574,6 +690,7 @@ fn setup_nodes(segdefs: &[Vec<u16>]) -> Vec<Node> {
     nodes
 }
 
+#[allow(clippy::type_complexity)]
 fn setup_transistors(
     nodes: &mut Vec<Node>,
     trans_defs: Vec<TransistorDefinition>,
