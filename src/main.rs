@@ -1,3 +1,5 @@
+#![allow(unused_variables, dead_code)]
+//
 use fnv::FnvHashMap;
 use std;
 use std::{
@@ -12,9 +14,9 @@ const NGND: u16 = 2;
 const NPWR: u16 = 1;
 
 pub struct SimulationState {
-    half_steps: u64,
+    cycles: u64,
     nodes: Vec<Node>,
-    node_number_by_name_map: FnvHashMap<String, u16>,
+    node_number_by_name: FnvHashMap<String, u16>,
     has_ground: bool,
     has_power: bool,
     group: Vec<u16>,
@@ -25,20 +27,21 @@ pub struct SimulationState {
     recalc_lists: [Option<Vec<u16>>; 2],
     cur_recalc_list_index: u8,
     group_empty: bool,
+    step_cycle_count: u8,
 }
 
 impl SimulationState {
     pub fn new(
         nodes: Vec<Node>,
         node_counts: Vec<u8>,
-        node_number_by_name_map: FnvHashMap<String, u16>,
+        node_number_by_name: FnvHashMap<String, u16>,
         nodes_c1_c2: Vec<Vec<u16>>,
         transistors: Vec<Transistor>,
     ) -> Self {
         SimulationState {
-            half_steps: 0,
+            cycles: 0,
             nodes,
-            node_number_by_name_map,
+            node_number_by_name,
             node_counts,
             has_ground: false,
             has_power: false,
@@ -49,7 +52,42 @@ impl SimulationState {
             recalc_lists: [None, None],
             cur_recalc_list_index: 0,
             group_empty: true,
+            step_cycle_count: 0,
         }
+    }
+
+    fn half_step(&mut self) {
+        let cpu_clk0 = self.is_node_high(self.node_number_by_name["cpu_clk0"]);
+        let clk = self.is_node_high(self.node_number_by_name["clk0"]);
+
+        if clk {
+            self.set_low("clk0");
+        } else {
+            self.set_high("clk0");
+        }
+
+        if self.step_cycle_count > 0 {
+            self.step_cycle_count -= 1;
+            if self.step_cycle_count == 0 {
+                self.set_high("io_ce");
+            }
+        } else if self.is_node_high(self.node_number_by_name["cpu_ab13"])
+            && !self.is_node_high(self.node_number_by_name["cpu_ab14"])
+            && !self.is_node_high(self.node_number_by_name["cpu_ab15"])
+            && self.is_node_high(self.node_number_by_name["cpu_clk0"])
+        {
+            self.set_low("io_ce");
+            self.step_cycle_count = 11;
+        }
+
+        // self.handle_chr_bus();
+        // ...
+
+        self.cycles += 1;
+    }
+
+    fn is_node_high(&self, node_number: u16) -> bool {
+        self.nodes[node_number as usize].state
     }
 
     fn recalc_node_list(&mut self, mut recalc_list: Option<Vec<u16>>) {
@@ -100,14 +138,14 @@ impl SimulationState {
     }
 
     fn set_high(&mut self, node_name: &str) {
-        let node_number = self.node_number_by_name_map[node_name];
+        let node_number = self.node_number_by_name[node_name];
         self.nodes[node_number as usize].pullup = true;
         self.nodes[node_number as usize].pulldown = false;
         self.recalc_node_list(Some(vec![node_number]))
     }
 
     fn set_low(&mut self, node_name: &str) {
-        let node_number = self.node_number_by_name_map[node_name];
+        let node_number = self.node_number_by_name[node_name];
         self.nodes[node_number as usize].pullup = false;
         self.nodes[node_number as usize].pulldown = true;
         self.recalc_node_list(Some(vec![node_number]))
@@ -128,8 +166,7 @@ impl SimulationState {
                 self.nodes[node_number].state = new_state;
                 // TODO(perf): Get rid of clone
                 for i in self.nodes[node_number].gates.clone() {
-                    // TODO(perf): Get rid of clone
-                    if self.nodes[node_number].state.clone() {
+                    if self.nodes[node_number].state {
                         self.turn_transistor_on(i);
                     } else {
                         self.turn_transistor_off(i);
