@@ -1031,7 +1031,22 @@ fn setup_transistors(
 }
 
 fn main() {
-    println!("woot");
+    let conversion_table = id_conversion_table();
+    let seg_defs = load_segment_definitions(&conversion_table);
+    let trans_defs = load_transistor_definitions(&conversion_table);
+    let mut nodes = setup_nodes(&seg_defs);
+    let (transistors, node_counts, nodes_c1_c2, transistor_index_by_name) =
+        setup_transistors(&mut nodes, trans_defs);
+
+    let node_number_number_by_name = load_node_number_by_name_map(&conversion_table);
+    let mut state = SimulationState::new(
+        nodes,
+        node_counts,
+        node_number_number_by_name,
+        nodes_c1_c2,
+        transistors,
+    );
+    state.init(false);
 }
 
 #[cfg(test)]
