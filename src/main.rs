@@ -17,6 +17,7 @@ const NUMBERS: [&str; 32] = [
     "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
 ];
 
+#[allow(clippy::unreadable_literal)]
 const PALETTE_ARGB: [u32; 64] = [
     0xFF666666, 0xFF002A88, 0xFF1412A7, 0xFF3B00A4, 0xFF5C007E, 0xFF6E0040, 0xFF6C0600, 0xFF561D00,
     0xFF333500, 0xFF0B4800, 0xFF005200, 0xFF004F08, 0xFF00404D, 0xFF000000, 0xFF000000, 0xFF000000,
@@ -65,7 +66,7 @@ pub struct SimulationState {
     prg_ram: Box<[u8; 0x8000]>,
     last_cpu_db_value: u8,
     last_data: u8,
-    prev_hpos: Option<u8>,
+    prev_hpos: Option<u16>,
     ppu_framebuffer: Box<[u32; 256 * 240]>,
 }
 
@@ -147,10 +148,10 @@ impl SimulationState {
         }
 
         if self.read_bits("pclk1", 0) > 0 {
-            let hpos = (self.read_bits("hpos", 0) - 2) as u8;
+            let hpos = self.read_bits("hpos", 0) - 2;
             if self.prev_hpos.is_none() || hpos != self.prev_hpos.unwrap() {
                 let vpos = self.read_bits("vpos", 0);
-                if hpos >= 0 && hpos <= 255 && vpos < 240 {
+                if hpos <= 255 && vpos < 240 {
                     let palette_entry = self.read_bit("pal_d0_out")
                         | (self.read_bit("pal_d1_out") << 1)
                         | (self.read_bit("pal_d2_out") << 2)
@@ -456,7 +457,11 @@ impl SimulationState {
                     0
                 }
             }
-            MirroringType::FourScreens => (a & 0xc00) >> 16,
+            MirroringType::FourScreens => {
+                // TODO: Wouldn't this always equal 0?
+                // (a & 0xc00) >> 16
+                unimplemented!()
+            }
             MirroringType::ScreenAOnly => 0,
             MirroringType::ScreenBOnly => 1,
         }
