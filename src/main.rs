@@ -17,6 +17,25 @@ const NUMBERS: [&str; 32] = [
     "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
 ];
 
+const PALETTE_ARGB: [u32; 64] = [
+    0xFF666666, 0xFF002A88, 0xFF1412A7, 0xFF3B00A4, 0xFF5C007E, 0xFF6E0040, 0xFF6C0600, 0xFF561D00,
+    0xFF333500, 0xFF0B4800, 0xFF005200, 0xFF004F08, 0xFF00404D, 0xFF000000, 0xFF000000, 0xFF000000,
+    0xFFADADAD, 0xFF155FD9, 0xFF4240FF, 0xFF7527FE, 0xFFA01ACC, 0xFFB71E7B, 0xFFB53120, 0xFF994E00,
+    0xFF6B6D00, 0xFF388700, 0xFF0C9300, 0xFF008F32, 0xFF007C8D, 0xFF000000, 0xFF000000, 0xFF000000,
+    0xFFFFFEFF, 0xFF64B0FF, 0xFF9290FF, 0xFFC676FF, 0xFFF36AFF, 0xFFFE6ECC, 0xFFFE8170, 0xFFEA9E22,
+    0xFFBCBE00, 0xFF88D800, 0xFF5CE430, 0xFF45E082, 0xFF48CDDE, 0xFF4F4F4F, 0xFF000000, 0xFF000000,
+    0xFFFFFEFF, 0xFFC0DFFF, 0xFFD3D2FF, 0xFFE8C8FF, 0xFFFBC2FF, 0xFFFEC4EA, 0xFFFECCC5, 0xFFF7D8A5,
+    0xFFE4E594, 0xFFCFEF96, 0xFFBDF4AB, 0xFFB3F3CC, 0xFFB5EBF2, 0xFFB8B8B8, 0xFF000000, 0xFF000000,
+];
+
+enum MirroringType {
+    Horizontal,
+    Vertical,
+    FourScreens,
+    ScreenAOnly,
+    ScreenBOnly,
+}
+
 pub struct SimulationState {
     cycle: u16,
     nodes: Vec<Node>,
@@ -38,6 +57,16 @@ pub struct SimulationState {
     chr_address: u16,
     node_number_cache: FnvHashMap<String, Vec<u16>>,
     bit_count_cache: FnvHashMap<String, u8>,
+    last_address: u16,
+    mirroring_type: MirroringType,
+    chr_ram: Box<[u8; 0x2000]>,
+    nametable_ram: Box<[[u8; 0x400]; 4]>,
+    cpu_ram: Box<[u8; 0x800]>,
+    prg_ram: Box<[u8; 0x8000]>,
+    last_cpu_db_value: u8,
+    last_data: u8,
+    prev_hpos: Option<u8>,
+    ppu_framebuffer: Box<[u32; 256 * 240]>,
 }
 
 impl SimulationState {
@@ -69,6 +98,16 @@ impl SimulationState {
             chr_address: 0,
             node_number_cache: FnvHashMap::default(),
             bit_count_cache: FnvHashMap::default(),
+            last_address: 0,
+            mirroring_type: MirroringType::Horizontal,
+            chr_ram: Box::new([0; 0x2000]),
+            nametable_ram: Box::new([[0; 0x400]; 4]),
+            cpu_ram: Box::new([0; 0x800]),
+            prg_ram: Box::new([0; 0x8000]),
+            last_cpu_db_value: 0,
+            last_data: 0,
+            prev_hpos: None,
+            ppu_framebuffer: Box::new([0; 256 * 240]),
         }
     }
 
@@ -92,14 +131,70 @@ impl SimulationState {
             && !self.is_node_high(self.node_number_by_name["cpu_ab15"])
             && self.is_node_high(self.node_number_by_name["cpu_clk0"])
         {
+            // Simulate the 74139's logic
             self.set_low("io_ce");
             self.step_cycle_count = 11;
         }
 
-        // self.handle_chr_bus();
-        // ...
+        self.handle_chr_bus();
+
+        if cpu_clk0 != self.is_node_high(self.node_number_by_name["cpu_clk0"]) {
+            if cpu_clk0 {
+                self.handle_cpu_bus_read();
+            } else {
+                self.handle_cpu_bus_write();
+            }
+        }
+
+        if self.read_bits("pclk1", 0) > 0 {
+            let hpos = (self.read_bits("hpos", 0) - 2) as u8;
+            if self.prev_hpos.is_none() || hpos != self.prev_hpos.unwrap() {
+                let vpos = self.read_bits("vpos", 0);
+                if hpos >= 0 && hpos <= 255 && vpos < 240 {
+                    let palette_entry = self.read_bit("pal_d0_out")
+                        | (self.read_bit("pal_d1_out") << 1)
+                        | (self.read_bit("pal_d2_out") << 2)
+                        | (self.read_bit("pal_d3_out") << 3)
+                        | (self.read_bit("pal_d4_out") << 4)
+                        | (self.read_bit("pal_d5_out") << 5);
+                    self.ppu_framebuffer[((vpos << 8) | hpos) as usize] =
+                        PALETTE_ARGB[palette_entry as usize];
+                }
+                self.prev_hpos = Some(hpos);
+            }
+        }
 
         self.cycle += 1;
+    }
+
+    fn handle_cpu_bus_read(&mut self) {
+        if self.is_node_high(self.node_number_by_name["cpu_rw"]) {
+            let a = self.read_cpu_address_bus();
+            let (d, open_bus) = self.cpu_read(a);
+
+            if open_bus {
+                self.float_bits("cpu_db", 8);
+            } else {
+                self.write_bits("cpu_db", 8, u16::from(d));
+            }
+        }
+    }
+
+    fn handle_cpu_bus_write(&mut self) {
+        if !self.is_node_high(self.node_number_by_name["cpu_rw"]) {
+            let a = self.read_cpu_address_bus();
+            let d = self.read_cpu_data_bus();
+            self.cpu_write(a, d);
+        }
+    }
+
+    fn read_cpu_address_bus(&mut self) -> u16 {
+        self.read_bits("cpu_ab", 16)
+    }
+
+    fn read_cpu_data_bus(&mut self) -> u8 {
+        self.last_cpu_db_value = self.read_bits("cpu_db", 8) as u8;
+        self.last_cpu_db_value
     }
 
     fn is_node_high(&self, node_number: u16) -> bool {
@@ -252,44 +347,146 @@ impl SimulationState {
 
         // rising edge of ALE
         if self.prev_ppu_ale && ale {
-            //self.chr_address = self.read_ppu_address_bus();
+            self.chr_address = self.read_ppu_address_bus();
         }
-        // TODO:
-        // ...
-    }
-    /*
-    void handleChrBus() { /
-        bool ale = isNodeHigh(nodenames["ale"]);
-        bool rd = isNodeHigh(nodenames["rd"]);
-        bool wr = isNodeHigh(nodenames["wr"]);
 
-        // rising edge of ALE
-        if(!prevPpuAle && ale) {
-            chrAddress = readPpuAddressBus();
-        }
         // falling edge of /RD - put bits on bus
-        if(prevPpuRd && !rd) {
-            /*var d = eval(readTriggers[a]);*/
-    //if(d == undefined) {
-    writeBits("db", 8, mPpuRead(chrAddress));
-    }
-    // rising edge of /RD - float the data bus
-    if(!prevPpuRd && rd) {
-    floatBits("db", 8);
-    }
-    // rising edge of /WR - store data in RAM
-    if(!prevPpuWr && wr) {
-    //eval(writeTriggers[a]);
-    mPpuWrite(chrAddress, readPpuDataBus());
+        if self.prev_ppu_read && !rd {
+            self.write_bits("db", 8, u16::from(self.ppu_read(self.chr_address)));
+        }
+
+        // rising edge of /RD - flaot the data bus
+        if !self.prev_ppu_read && rd {
+            self.float_bits("db", 8);
+        }
+
+        // rising edge of /WR - store data in RAM
+        if !self.prev_ppu_write && wr {
+            let ppu_data_bus_val = self.read_ppu_data_bus();
+            self.ppu_write(self.chr_address, ppu_data_bus_val);
+        }
+
+        self.read_ppu_data_bus();
+        self.prev_ppu_ale = ale;
+        self.prev_ppu_read = rd;
+        self.prev_ppu_write = wr;
     }
 
-    readPpuDataBus();
-
-    prevPpuAle = ale;
-    prevPpuRd = rd;
-    prevPpuWr = wr;
+    fn read_ppu_data_bus(&mut self) -> u8 {
+        if !self.is_node_high(self.node_number_by_name["rd"])
+            || !self.is_node_high(self.node_number_by_name["wr"])
+        {
+            self.last_data = self.read_bits("db", 8) as u8;
+        }
+        self.last_data
     }
-     */
+
+    fn float_bits(&mut self, name: &str, n: u16) {
+        let mut recalc_nodes = Vec::with_capacity(n as usize);
+        for i in 0..n {
+            let node_number = self.node_number_by_name[format!("{}{}", name, i).as_str()];
+            self.nodes[node_number as usize].pulldown = false;
+            self.nodes[node_number as usize].pullup = false;
+            recalc_nodes.push(node_number);
+        }
+        self.recalc_node_list(Some(recalc_nodes));
+    }
+
+    /// Read byte at address in memory, returning the byte at that address and a boolean
+    /// indicating an open bus.
+    fn cpu_read(&self, a: u16) -> (u8, bool) {
+        if a < 0x2000 {
+            (self.cpu_ram[(a & 0x7ff) as usize], false)
+        } else if a >= 0x8000 {
+            (self.prg_ram[(a - 0x8000) as usize], false)
+        } else {
+            // TODO: proper open bus implementation
+            (self.last_cpu_db_value, true)
+        }
+    }
+
+    fn cpu_write(&mut self, a: u16, d: u8) {
+        if a < 0x2000 {
+            self.cpu_ram[(a & 0x7ff) as usize] = d;
+        } else if a >= 0x8000 {
+            self.prg_ram[(a - 0x8000) as usize] = d;
+        }
+        // else external device (i.e. PPU)
+    }
+
+    fn ppu_write(&mut self, mut a: u16, d: u8) {
+        a &= 0x3fff;
+        if a >= 0x3000 {
+            a -= 0x1000;
+        }
+
+        if a < 0x2000 {
+            self.chr_ram[a as usize] = d
+        } else {
+            self.nametable_ram[self.get_nametable(a) as usize][(a & 0x3ff) as usize] = d;
+        }
+    }
+
+    fn ppu_read(&self, mut a: u16) -> u8 {
+        a &= 0x3fff;
+        if a >= 0x3000 {
+            a -= 0x1000;
+        }
+
+        if a < 0x2000 {
+            self.chr_ram[a as usize]
+        } else {
+            self.nametable_ram[self.get_nametable(a) as usize][(a & 0x3ff) as usize]
+        }
+    }
+
+    fn get_nametable(&self, a: u16) -> u16 {
+        match self.mirroring_type {
+            MirroringType::Horizontal => {
+                if a & 0x800 > 0 {
+                    1
+                } else {
+                    0
+                }
+            }
+            MirroringType::Vertical => {
+                if a & 0x400 > 0 {
+                    1
+                } else {
+                    0
+                }
+            }
+            MirroringType::FourScreens => (a & 0xc00) >> 16,
+            MirroringType::ScreenAOnly => 0,
+            MirroringType::ScreenBOnly => 1,
+        }
+    }
+
+    fn write_bits(&mut self, name: &str, n: u16, mut x: u16) {
+        let mut recalc_nodes = Vec::with_capacity(n as usize);
+        for i in 0..n {
+            let node_number = self.node_number_by_name[format!("{}{}", name, i).as_str()];
+            if x % 2 == 0 {
+                self.nodes[node_number as usize].pulldown = true;
+                self.nodes[node_number as usize].pullup = false;
+            } else {
+                self.nodes[node_number as usize].pulldown = false;
+                self.nodes[node_number as usize].pullup = true;
+            }
+            recalc_nodes.push(node_number);
+            x >>= 1;
+        }
+
+        self.recalc_node_list(Some(recalc_nodes));
+    }
+
+    fn read_ppu_address_bus(&mut self) -> u16 {
+        if self.is_node_high(self.node_number_by_name["ale"]) {
+            self.last_address = self.read_bits("ab", 14);
+        }
+
+        self.last_address
+    }
 
     fn turn_transistor_on(&mut self, i: u16) {
         let i = i as usize;
