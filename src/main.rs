@@ -112,6 +112,83 @@ impl SimulationState {
         }
     }
 
+    fn all_nodes(&self) -> Vec<u16> {
+        let mut nodes = Vec::new();
+        for node in self.nodes.iter() {
+            if node.num != NPWR && node.num != NGND && node.num != EMPTYNODE {
+                nodes.push(node.num);
+            }
+        }
+        nodes
+    }
+
+    fn init(&mut self, soft_reset: bool) {
+        self.prev_hpos = None;
+
+        if soft_reset {
+            self.set_low("res");
+            for i in 0..=(12 * 8 * 2) {
+                if self.is_node_high(self.node_number_by_name["clk0"]) {
+                    self.set_low("clk0");
+                } else {
+                    self.set_high("clk0");
+                }
+            }
+            self.set_high("res");
+        } else {
+            self.ppu_framebuffer.iter_mut().for_each(|b| *b = 0);
+            self.cpu_ram.iter_mut().for_each(|b| *b = 0);
+            self.prg_ram.iter_mut().for_each(|b| *b = 0);
+            self.chr_ram.iter_mut().for_each(|b| *b = 0);
+            self.nametable_ram
+                .iter_mut()
+                .for_each(|nt| nt.iter_mut().for_each(|b| *b = 0));
+
+            for mut node in self.nodes.iter_mut() {
+                node.state = false;
+                node.floating = true;
+            }
+
+            self.nodes[NGND as usize].state = false;
+            self.nodes[NGND as usize].floating = false;
+            self.nodes[NPWR as usize].state = true;
+            self.nodes[NPWR as usize].floating = false;
+
+            for mut transistor in self.transistors.iter_mut() {
+                transistor.on = transistor.gate == NPWR
+            }
+
+            self.set_low("res");
+            self.set_low("clk0");
+            self.set_high("io_ce");
+            self.set_high("int");
+
+            for i in 0..6 {
+                self.set_high("clk0");
+                self.set_low("clk0");
+            }
+
+            self.set_low("cpu_so");
+            self.set_high("cpu_irq");
+            self.set_high("cpu_nmi");
+
+            self.recalc_node_list(Some(self.all_nodes()));
+
+            for i in 0..(12 * 8) {
+                self.set_high("clk0");
+                self.set_low("clk0");
+            }
+
+            self.set_high("res");
+        }
+
+        self.cycle = 0;
+        self.chr_address = 0;
+        self.prev_ppu_read = true;
+        self.prev_ppu_write = true;
+        self.prev_ppu_ale = false;
+    }
+
     fn half_step(&mut self) {
         let cpu_clk0 = self.is_node_high(self.node_number_by_name["cpu_clk0"]);
         let clk = self.is_node_high(self.node_number_by_name["clk0"]);
