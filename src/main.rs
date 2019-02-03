@@ -66,7 +66,7 @@ pub struct SimulationState {
     prg_ram: Box<[u8; 0x8000]>,
     last_cpu_db_value: u8,
     last_data: u8,
-    prev_hpos: Option<u16>,
+    prev_hpos: i32,
     ppu_framebuffer: Box<[u32; 256 * 240]>,
 }
 
@@ -89,7 +89,7 @@ impl SimulationState {
             transistors,
             nodes_c1_c2,
             processed_nodes: Vec::new(),
-            recalc_lists: [None, None],
+            recalc_lists: [Some(Vec::new()), Some(Vec::new())],
             cur_recalc_list_index: 0,
             group_empty: true,
             step_cycle_count: 0,
@@ -107,7 +107,7 @@ impl SimulationState {
             prg_ram: Box::new([0; 0x8000]),
             last_cpu_db_value: 0,
             last_data: 0,
-            prev_hpos: None,
+            prev_hpos: -1,
             ppu_framebuffer: Box::new([0; 256 * 240]),
         }
     }
@@ -123,7 +123,7 @@ impl SimulationState {
     }
 
     fn init(&mut self, soft_reset: bool) {
-        self.prev_hpos = None;
+        self.prev_hpos = -1;
 
         if soft_reset {
             self.set_low("res");
@@ -225,20 +225,20 @@ impl SimulationState {
         }
 
         if self.read_bits("pclk1", 0) > 0 {
-            let hpos = self.read_bits("hpos", 0) - 2;
-            if self.prev_hpos.is_none() || hpos != self.prev_hpos.unwrap() {
+            let hpos = i32::from(self.read_bits("hpos", 0)) - 2;
+            if hpos != self.prev_hpos {
                 let vpos = self.read_bits("vpos", 0);
-                if hpos <= 255 && vpos < 240 {
+                if hpos >= 0 && hpos < 256 && vpos < 240 {
                     let palette_entry = self.read_bit("pal_d0_out")
                         | (self.read_bit("pal_d1_out") << 1)
                         | (self.read_bit("pal_d2_out") << 2)
                         | (self.read_bit("pal_d3_out") << 3)
                         | (self.read_bit("pal_d4_out") << 4)
                         | (self.read_bit("pal_d5_out") << 5);
-                    self.ppu_framebuffer[((vpos << 8) | hpos) as usize] =
+                    self.ppu_framebuffer[((vpos << 8) | (hpos as u16)) as usize] =
                         PALETTE_ARGB[palette_entry as usize];
                 }
-                self.prev_hpos = Some(hpos);
+                self.prev_hpos = hpos;
             }
         }
 
@@ -285,7 +285,7 @@ impl SimulationState {
             self.recalc_lists[0] = Some(vec![100; 0]);
             self.recalc_lists[1] = Some(vec![100; 0]);
         } else {
-            self.recalc_lists[0].take();
+            self.recalc_lists[0] = Some(Vec::new());
         }
 
         self.cur_recalc_list_index = 0;
@@ -315,13 +315,14 @@ impl SimulationState {
                     .take()
                     .unwrap(),
             );
+
             self.cur_recalc_list_index = if self.cur_recalc_list_index == 0 {
                 1
             } else {
                 0
             };
 
-            self.recalc_lists[self.cur_recalc_list_index as usize].take();
+            self.recalc_lists[self.cur_recalc_list_index as usize] = Some(Vec::new());
             self.group_empty = true;
         }
     }
@@ -1047,6 +1048,11 @@ fn main() {
         transistors,
     );
     state.init(false);
+
+    for _ in 0..10001 {
+        state.half_step();
+    }
+    println!("{}", state.transistors[0].on);
 }
 
 #[cfg(test)]
