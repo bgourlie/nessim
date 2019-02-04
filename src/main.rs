@@ -7,6 +7,8 @@ use std::{
     io::{BufRead, BufReader, Read},
 };
 
+const SPRITE_RAM_SIZE: usize = 0x120;
+const PALETTE_RAM_SIZE: usize = 0x20;
 const NUM_NODES: usize = 33001;
 const EMPTYNODE: u16 = 65535;
 const CPU_OFFSET: u16 = 13000;
@@ -28,6 +30,24 @@ const PALETTE_ARGB: [u32; 64] = [
     0xFFFFFEFF, 0xFFC0DFFF, 0xFFD3D2FF, 0xFFE8C8FF, 0xFFFBC2FF, 0xFFFEC4EA, 0xFFFECCC5, 0xFFF7D8A5,
     0xFFE4E594, 0xFFCFEF96, 0xFFBDF4AB, 0xFFB3F3CC, 0xFFB5EBF2, 0xFFB8B8B8, 0xFF000000, 0xFF000000,
 ];
+
+enum MemoryType {
+    /// $0000-$07FF (mirrored to $1FFF)
+    CpuRam,
+    /// $8000-$FFFF
+    PrgRam,
+    /// $0000-$1FFF
+    ChrRam,
+    /// $2000-$2FFF ($2000-$23FF is nametable A, $2400-$27FF is nametable B)
+    NametableRam,
+    /// Internal to the PPU - 32 bytes (including some mirrors)
+    PaletteRam,
+    /// Internal to the PPU.  256 bytes for primary + 32 bytes for secondary
+    SpriteRam,
+    /// All of the above put together + a state of all of the nodes in the simulation (used for
+    /// save/load state)
+    FullState,
+}
 
 enum MirroringType {
     Horizontal,
@@ -68,6 +88,8 @@ pub struct SimulationState {
     last_data: u8,
     prev_hpos: i32,
     ppu_framebuffer: Box<[u32; 256 * 240]>,
+    sprite_nodes: Vec<Vec<(i32, i32)>>,
+    palette_nodes: Vec<Vec<(i32, i32)>>,
 }
 
 impl SimulationState {
@@ -76,6 +98,8 @@ impl SimulationState {
         node_counts: Vec<u8>,
         node_number_by_name: FnvHashMap<String, u16>,
         nodes_c1_c2: Vec<Vec<u16>>,
+        sprite_nodes: Vec<Vec<(i32, i32)>>,
+        palette_nodes: Vec<Vec<(i32, i32)>>,
         transistors: Vec<Transistor>,
     ) -> Self {
         SimulationState {
@@ -109,8 +133,77 @@ impl SimulationState {
             last_data: 0,
             prev_hpos: -1,
             ppu_framebuffer: Box::new([0; 256 * 240]),
+            sprite_nodes,
+            palette_nodes,
         }
     }
+
+    fn set_memory_state(&mut self, memory_type: MemoryType, buffer: &[u8]) {
+        match memory_type {
+            MemoryType::PrgRam => self.prg_ram.copy_from_slice(buffer),
+            MemoryType::ChrRam => self.chr_ram.copy_from_slice(buffer),
+            MemoryType::CpuRam => self.cpu_ram.copy_from_slice(buffer),
+            MemoryType::NametableRam => {
+                for i in 0..4 {
+                    let start_index = i * 0x400;
+                    self.nametable_ram[i]
+                        .copy_from_slice(&buffer[start_index..(start_index + 0x400)]);
+                }
+            }
+            MemoryType::PaletteRam => {
+                for (i, byte) in buffer.iter().enumerate().take(PALETTE_RAM_SIZE) {
+                    self.palette_write(i as u16, *byte);
+                }
+            }
+            MemoryType::SpriteRam => {
+                for (i, byte) in buffer.iter().enumerate().take(SPRITE_RAM_SIZE) {
+                    self.sprite_write(i as u16, *byte);
+                }
+            }
+            MemoryType::FullState => unimplemented!(),
+        }
+    }
+
+    fn palette_write(&mut self, addr: u16, val: u8) {
+        for b in 0..6 {
+            let (n0, n1) = self.palette_nodes[addr as usize][b as usize];
+
+            if val & (1 << b) > 0 {
+                self.set_bit(n1, n0);
+            } else {
+                self.set_bit(n0, n1);
+            }
+        }
+    }
+
+    fn sprite_write(&mut self, addr: u16, val: u8) {
+        for b in 0..8 {
+            let (n0, n1) = self.sprite_nodes[addr as usize][b as usize];
+            if val & (1 << b) > 0 {
+                self.set_bit(n1, n0);
+            } else {
+                self.set_bit(n0, n1);
+            }
+        }
+    }
+
+    fn set_bit(&mut self, n1: i32, n2: i32) {
+        if n1 < 0 || n2 < 0 {
+            return;
+        }
+
+        for gate in &self.nodes[n1 as usize].gates {
+            self.transistors[*gate as usize].on = true;
+        }
+
+        for gate in &self.nodes[n2 as usize].gates {
+            self.transistors[*gate as usize].on = false;
+        }
+
+        self.nodes[n1 as usize].state = true;
+        self.nodes[n2 as usize].state = false;
+        self.recalc_node_list(Some(vec![n1 as u16, n2 as u16]));
+    } //
 
     fn all_nodes(&self) -> Vec<u16> {
         let mut nodes = Vec::new();
@@ -1036,6 +1129,7 @@ fn main() {
     let seg_defs = load_segment_definitions(&conversion_table);
     let trans_defs = load_transistor_definitions(&conversion_table);
     let mut nodes = setup_nodes(&seg_defs);
+    let (palette_nodes, sprite_nodes) = load_ppu_nodes();
     let (transistors, node_counts, nodes_c1_c2, transistor_index_by_name) =
         setup_transistors(&mut nodes, trans_defs);
 
@@ -1045,6 +1139,8 @@ fn main() {
         node_counts,
         node_number_number_by_name,
         nodes_c1_c2,
+        sprite_nodes,
+        palette_nodes,
         transistors,
     );
     state.init(false);
