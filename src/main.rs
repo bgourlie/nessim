@@ -1143,9 +1143,7 @@ fn main() {
         transistors,
     );
 
-    println!("Node 0 floating pre-init: {}", sim.nodes[0].floating);
     sim.init(false);
-    println!("Node 0 floating post-init: {}", sim.nodes[0].floating);
 
     let mut prg_ram = vec![0_u8; 0x8000];
     let mut chr_ram = vec![0_u8; 0x2000];
@@ -1176,11 +1174,10 @@ fn verify_node_state<R: Read>(sim: &SimulationState, reader: &mut R) {
     for i in 0..NUM_NODES {
         let byte_index = i / 2;
         let bit_position = (i % 2) * 4;
-        println!("byte index: {} bit_position: {}", byte_index, bit_position);
         let bits = bytes[byte_index] >> bit_position;
         let floating = bits & 0b0000_0001 > 0;
-        let pullup = bits & 0b0000_0010 > 0;
-        let pulldown = bits & 0b0000_0100 > 0;
+        let pulldown = bits & 0b0000_0010 > 0;
+        let pullup = bits & 0b0000_0100 > 0;
         let state = bits & 0b0000_1000 > 0;
         let node = &sim.nodes[i];
         if node.floating != floating {
