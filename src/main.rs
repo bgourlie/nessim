@@ -1,7 +1,6 @@
 #![allow(unused_variables, dead_code)]
-//
+use byteorder::{LittleEndian, ReadBytesExt};
 use fnv::FnvHashMap;
-use std;
 use std::{
     fs::File,
     io::{BufRead, BufReader, Read},
@@ -1134,7 +1133,7 @@ fn main() {
         setup_transistors(&mut nodes, trans_defs);
 
     let node_number_number_by_name = load_node_number_by_name_map(&conversion_table);
-    let mut state = SimulationState::new(
+    let mut sim = SimulationState::new(
         nodes,
         node_counts,
         node_number_number_by_name,
@@ -1143,12 +1142,69 @@ fn main() {
         palette_nodes,
         transistors,
     );
-    state.init(false);
+    sim.init(false);
 
-    for _ in 0..10001 {
-        state.half_step();
+    let mut prg_ram = vec![0_u8; 0x8000];
+    let mut chr_ram = vec![0_u8; 0x2000];
+    let mut file = File::open("C:\\Users\\bgour\\Desktop\\run.dat").unwrap();
+
+    let num_steps = file.read_i32::<LittleEndian>().unwrap();
+    let half_cycles_per_step = file.read_i32::<LittleEndian>().unwrap();
+    file.read_exact(&mut prg_ram).unwrap();
+    file.read_exact(&mut chr_ram).unwrap();
+
+    println!("Num Steps: {}", num_steps);
+    println!("Half Cycles Per Step: {}", half_cycles_per_step);
+    sim.set_memory_state(MemoryType::ChrRam, &chr_ram);
+    sim.set_memory_state(MemoryType::PrgRam, &prg_ram);
+    verify_node_state(&sim, &mut file);
+    for _ in 0..num_steps {
+        for _ in 0..half_cycles_per_step {
+            sim.half_step();
+        }
     }
-    println!("{}", state.transistors[0].on);
+    println!("{}", sim.transistors[0].on);
+}
+
+fn verify_node_state<R: Read>(sim: &SimulationState, reader: &mut R) {
+    let mut bytes = vec![0_u8; 16501];
+    reader.read_exact(&mut bytes).unwrap();
+    for i in 0..NUM_NODES {
+        let byte_index = i / 2;
+        let bit_position = (i % 2) * 4;
+        println!("byte index: {} bit_position: {}", byte_index, bit_position);
+        let bits = bytes[byte_index] >> bit_position;
+        let floating = bits & 0b0000_0001 > 0;
+        let pullup = bits & 0b0000_0010 > 0;
+        let pulldown = bits & 0b0000_0100 > 0;
+        let state = bits & 0b0000_1000 > 0;
+        let node = &sim.nodes[i];
+        if node.floating != floating {
+            println!(
+                "Floating expected was {} but was {} at node {}",
+                floating, node.floating, i
+            );
+            return;
+        } else if node.pullup != pullup {
+            println!(
+                "Pullup expected was {} but was {} at node {}",
+                pullup, node.pullup, i
+            );
+            return;
+        } else if node.pulldown != pulldown {
+            println!(
+                "Pulldown expected was {} but was {} at node {}",
+                pulldown, node.pulldown, i
+            );
+            return;
+        } else if node.state != state {
+            println!(
+                "State expected was {} but was {} at node {}",
+                state, node.state, i
+            );
+            return;
+        }
+    }
 }
 
 #[cfg(test)]
