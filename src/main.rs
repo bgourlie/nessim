@@ -1142,7 +1142,10 @@ fn main() {
         palette_nodes,
         transistors,
     );
+
+    println!("Node 0 floating pre-init: {}", sim.nodes[0].floating);
     sim.init(false);
+    println!("Node 0 floating post-init: {}", sim.nodes[0].floating);
 
     let mut prg_ram = vec![0_u8; 0x8000];
     let mut chr_ram = vec![0_u8; 0x2000];
@@ -1157,6 +1160,7 @@ fn main() {
     println!("Half Cycles Per Step: {}", half_cycles_per_step);
     sim.set_memory_state(MemoryType::ChrRam, &chr_ram);
     sim.set_memory_state(MemoryType::PrgRam, &prg_ram);
+    println!("Node 0 floating post-init: {}", sim.nodes[0].floating);
     verify_node_state(&sim, &mut file);
     for _ in 0..num_steps {
         for _ in 0..half_cycles_per_step {
