@@ -202,7 +202,7 @@ impl SimulationState {
         self.nodes[n1 as usize].state = true;
         self.nodes[n2 as usize].state = false;
         self.recalc_node_list(Some(vec![n1 as u16, n2 as u16]));
-    } //
+    }
 
     fn all_nodes(&self) -> Vec<u16> {
         let mut nodes = Vec::new();
@@ -419,20 +419,6 @@ impl SimulationState {
         }
     }
 
-    fn set_high(&mut self, node_name: &str) {
-        let node_number = self.node_number_by_name[node_name];
-        self.nodes[node_number as usize].pullup = true;
-        self.nodes[node_number as usize].pulldown = false;
-        self.recalc_node_list(Some(vec![node_number]))
-    }
-
-    fn set_low(&mut self, node_name: &str) {
-        let node_number = self.node_number_by_name[node_name];
-        self.nodes[node_number as usize].pullup = false;
-        self.nodes[node_number as usize].pulldown = true;
-        self.recalc_node_list(Some(vec![node_number]))
-    }
-
     fn recalc_node(&mut self, node_number: u16) {
         if node_number == NGND || node_number == NPWR {
             return;
@@ -456,6 +442,53 @@ impl SimulationState {
                 }
             }
         }
+    }
+
+    fn turn_transistor_on(&mut self, i: u16) {
+        let i = i as usize;
+        if !self.transistors[i].on {
+            self.transistors[i].on = true;
+            self.add_recalc_node(self.transistors[i].c1);
+        }
+    }
+
+    fn turn_transistor_off(&mut self, i: u16) {
+        let i = i as usize;
+        if self.transistors[i].on {
+            self.transistors[i].on = false;
+            self.add_recalc_node(self.transistors[i].c1);
+            self.add_recalc_node(self.transistors[i].c2);
+        }
+    }
+
+    fn add_recalc_node(&mut self, node_number: u16) {
+        if node_number == NGND || node_number == NPWR {
+            return;
+        }
+
+        if self.processed_nodes[node_number as usize] == 0 {
+            self.recalc_lists[self.cur_recalc_list_index as usize]
+                .as_mut()
+                .unwrap()
+                .push(node_number);
+            self.processed_nodes[node_number as usize] = 1;
+        }
+
+        self.group_empty = false;
+    }
+
+    fn set_high(&mut self, node_name: &str) {
+        let node_number = self.node_number_by_name[node_name];
+        self.nodes[node_number as usize].pullup = true;
+        self.nodes[node_number as usize].pulldown = false;
+        self.recalc_node_list(Some(vec![node_number]))
+    }
+
+    fn set_low(&mut self, node_name: &str) {
+        let node_number = self.node_number_by_name[node_name];
+        self.nodes[node_number as usize].pullup = false;
+        self.nodes[node_number as usize].pulldown = true;
+        self.recalc_node_list(Some(vec![node_number]))
     }
 
     fn read_bits(&mut self, name: &str, mut n: u8) -> u16 {
@@ -661,39 +694,6 @@ impl SimulationState {
         }
 
         self.last_address
-    }
-
-    fn turn_transistor_on(&mut self, i: u16) {
-        let i = i as usize;
-        if !self.transistors[i].on {
-            self.transistors[i].on = true;
-            self.add_recalc_node(self.transistors[i].c1);
-        }
-    }
-
-    fn turn_transistor_off(&mut self, i: u16) {
-        let i = i as usize;
-        if self.transistors[i].on {
-            self.transistors[i].on = false;
-            self.add_recalc_node(self.transistors[i].c1);
-            self.add_recalc_node(self.transistors[i].c2);
-        }
-    }
-
-    fn add_recalc_node(&mut self, node_number: u16) {
-        if node_number == NGND || node_number == NPWR {
-            return;
-        }
-
-        if self.processed_nodes[node_number as usize] == 0 {
-            self.recalc_lists[self.cur_recalc_list_index as usize]
-                .as_mut()
-                .unwrap()
-                .push(node_number);
-            self.processed_nodes[node_number as usize] = 1;
-        }
-
-        self.group_empty = false;
     }
 
     fn get_node_value(&mut self) -> bool {
@@ -1144,7 +1144,6 @@ fn main() {
     );
 
     sim.init(false);
-
     let mut prg_ram = vec![0_u8; 0x8000];
     let mut chr_ram = vec![0_u8; 0x2000];
     let mut file = File::open("C:\\Users\\bgour\\Desktop\\run.dat").unwrap();
@@ -1160,12 +1159,12 @@ fn main() {
     sim.set_memory_state(MemoryType::PrgRam, &prg_ram);
     println!("Node 0 floating post-init: {}", sim.nodes[0].floating);
     verify_node_state(&sim, &mut file);
-    for _ in 0..num_steps {
-        for _ in 0..half_cycles_per_step {
-            sim.half_step();
-        }
-    }
-    println!("{}", sim.transistors[0].on);
+    //    for _ in 0..num_steps {
+    //        for _ in 0..half_cycles_per_step {
+    //            sim.half_step();
+    //        }
+    //    }
+    //    println!("{}", sim.transistors[0].on);
 }
 
 fn verify_node_state<R: Read>(sim: &SimulationState, reader: &mut R) {
