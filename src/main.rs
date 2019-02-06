@@ -89,6 +89,7 @@ pub struct SimulationState {
     ppu_framebuffer: Box<[u32; 256 * 240]>,
     sprite_nodes: Vec<Vec<(i32, i32)>>,
     palette_nodes: Vec<Vec<(i32, i32)>>,
+    exec_count: usize,
 }
 
 impl SimulationState {
@@ -134,6 +135,7 @@ impl SimulationState {
             ppu_framebuffer: Box::new([0; 256 * 240]),
             sprite_nodes,
             palette_nodes,
+            exec_count: 0,
         }
     }
 
@@ -387,7 +389,13 @@ impl SimulationState {
                 panic!("Maximum loop exceeded")
             }
 
+            self.exec_count += 1;
+            let mut line = 0;
             for node_number in recalc_list.take().unwrap() {
+                line += 1;
+                if self.exec_count == 119 && line == 20 {
+                    println!("Break");
+                }
                 self.recalc_node(node_number);
             }
 
