@@ -1166,6 +1166,7 @@ fn main() {
     sim.set_memory_state(MemoryType::ChrRam, &chr_ram);
     sim.set_memory_state(MemoryType::PrgRam, &prg_ram);
     println!("Node 0 floating post-init: {}", sim.nodes[0].floating);
+    // TODO: Verify transistor state first!
     verify_node_state(&sim, &mut file);
     //    for _ in 0..num_steps {
     //        for _ in 0..half_cycles_per_step {
