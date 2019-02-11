@@ -90,7 +90,10 @@ pub struct SimulationState {
     ppu_framebuffer: Box<[u32; 256 * 240]>,
     sprite_nodes: Vec<Vec<(i32, i32)>>,
     palette_nodes: Vec<Vec<(i32, i32)>>,
-    exec_count: usize,
+    recalc_node_list_count: usize,
+    j: usize,
+    line: usize
+//    file: File
 }
 
 impl SimulationState {
@@ -136,7 +139,10 @@ impl SimulationState {
             ppu_framebuffer: Box::new([0; 256 * 240]),
             sprite_nodes,
             palette_nodes,
-            exec_count: 0,
+            recalc_node_list_count: 0,
+            j: 0,
+            line: 0
+//            file: File::create("trace.txt").unwrap()
         }
     }
 
@@ -374,7 +380,8 @@ impl SimulationState {
         self.nodes[node_number as usize].state
     }
 
-    fn recalc_node_list(&mut self, mut recalc_list: Option<Vec<u16>>) {
+    fn recalc_node_list(&mut self, mut list: Option<Vec<u16>>) {
+        self.recalc_node_list_count += 1;
         if self.processed_nodes.is_empty() {
             self.processed_nodes.extend_from_slice(&[0; NUM_NODES]);
             self.recalc_lists[0] = Some(vec![100; 0]);
@@ -386,18 +393,20 @@ impl SimulationState {
         self.cur_recalc_list_index = 0;
 
         for j in 0..100 {
+            self.j = j;
+
             if j == 99 {
                 panic!("Maximum loop exceeded")
             }
 
-            self.exec_count += 1;
-            let mut line = 0;
-            for node_number in recalc_list.take().unwrap() {
-                line += 1;
-                if self.exec_count == 119 && line == 21 {
-                    println!("Break");
-                }
+            self.line = 0;
+            let l = list.take().unwrap();
+
+            for node_number in l.clone() {
+                self.line += 1;
                 self.recalc_node(node_number);
+//                let group_string = self.group.iter().map(|n| format!("{}", n).to_owned()).collect::<Vec<String>>().join(",");
+//                self.file.write(format!("nn={} c={} j={} l={}:{}\r\n", node_number, self.recalc_node_list_count, j, line, group_string).as_bytes()).unwrap();
             }
 
             if self.group_empty {
@@ -411,11 +420,7 @@ impl SimulationState {
                 self.processed_nodes[*node_number as usize] = 0;
             }
 
-            recalc_list = Some(
-                self.recalc_lists[self.cur_recalc_list_index as usize]
-                    .take()
-                    .unwrap(),
-            );
+            list = self.recalc_lists[self.cur_recalc_list_index as usize].take();
 
             self.cur_recalc_list_index = if self.cur_recalc_list_index == 0 {
                 1
@@ -438,15 +443,21 @@ impl SimulationState {
         let new_state = self.get_node_value();
 
         // TODO(perf): Get rid of clone
-        for node_number in self.group.clone() {
-            let node_number = node_number as usize;
-            if self.nodes[node_number].state != new_state {
-                self.nodes[node_number].state = new_state;
+        for nn in self.group.clone() {
+            let nn = nn as usize;
+            if self.nodes[nn].state != new_state {
+                self.nodes[nn].state = new_state;
                 // TODO(perf): Get rid of clone
-                for i in self.nodes[node_number].gates.clone() {
-                    if self.nodes[node_number].state {
+                for i in self.nodes[nn].gates.clone() {
+                    if self.nodes[nn].state {
+                        if i == 17236 {
+                            println!("turning trans 17236 on (c:{} j:{} nn:{} l:{})", self.recalc_node_list_count, self.j, nn, self.line);
+                        }
                         self.turn_transistor_on(i);
                     } else {
+                        if i == 17236 {
+                            println!("turning trans 17236 off (c:{} j:{} nn:{} l:{})", self.recalc_node_list_count, self.j, nn, self.line);
+                        }
                         self.turn_transistor_off(i);
                     }
                 }
@@ -707,6 +718,7 @@ impl SimulationState {
     }
 
     fn get_node_value(&mut self) -> bool {
+        use std::num::Wrapping;
         if self.has_ground && self.has_power {
             for i in &self.group {
                 let i = *i;
@@ -731,8 +743,8 @@ impl SimulationState {
         } else if self.has_power {
             true
         } else {
-            let mut hi_area = 0_i64;
-            let mut lo_area = 0_i64;
+            let mut hi_area = 0_i32;
+            let mut lo_area = 0_i32;
             for node_number in &self.group {
                 let node = &self.nodes[*node_number as usize];
                 if node.pullup {
@@ -740,9 +752,9 @@ impl SimulationState {
                 } else if node.pulldown {
                     return false;
                 } else if node.state {
-                    hi_area += node.area
+                    hi_area = (Wrapping(hi_area) + Wrapping(node.area)).0
                 } else {
-                    lo_area += node.area
+                    lo_area = (Wrapping(lo_area) + Wrapping(node.area)).0
                 }
             }
 
@@ -754,10 +766,10 @@ impl SimulationState {
         self.has_ground = false;
         self.has_power = false;
         self.group.clear();
-        self.add_node_to_group(node_number);
+        self.add_node_to_group(node_number, 0);
     }
 
-    fn add_node_to_group(&mut self, node_number: u16) {
+    fn add_node_to_group(&mut self, node_number: u16, recurse_count: usize) {
         if node_number == NGND {
             self.has_ground = true;
             return;
@@ -773,17 +785,21 @@ impl SimulationState {
         }
 
         self.group.push(node_number);
-
-        for i in 0..(self.node_counts[node_number as usize] as usize) {
+        let len = self.node_counts[node_number as usize] as usize;
+        for i in 0..len {
             let transistor_index = self.nodes_c1_c2[node_number as usize][i] as usize;
             let transistor = &self.transistors[transistor_index];
+
+            if self.recalc_node_list_count == 20 && self.j == 0 && node_number == 23146 && self.line == 10536 {
+//                println!("transistor state is true should be false");
+            }
             if transistor.on {
                 let node_to_add = if transistor.c1 == node_number {
                     transistor.c2
                 } else {
                     transistor.c1
                 };
-                self.add_node_to_group(node_to_add);
+                self.add_node_to_group(node_to_add, recurse_count + 1);
             }
         }
     }
@@ -810,7 +826,7 @@ pub struct Node {
     pullup: bool,
     pulldown: bool,
     floating: bool,
-    area: i64,
+    area: i32,
     num: u16,
     gates: Vec<u16>,
     segs: Vec<(u16, u16)>,
@@ -1032,13 +1048,15 @@ fn load_ppu_nodes() -> (Vec<Vec<(i32, i32)>>, Vec<Vec<(i32, i32)>>) {
 }
 
 fn setup_nodes(segdefs: &[Vec<u16>]) -> Vec<Node> {
-    let max_id = usize::from(
+    use std::num::Wrapping;
+
+    let max_id = i32::from(
         segdefs
             .iter()
             .max_by(|seg1, seg2| seg1[0].cmp(&seg2[0]))
             .unwrap()[0],
     );
-    let mut nodes = vec![Node::default(); max_id + 1];
+    let mut nodes = vec![Node::default(); (max_id as usize) + 1];
     for seg in segdefs.iter() {
         let w = seg[0];
         let w_idx = w as usize;
@@ -1053,20 +1071,20 @@ fn setup_nodes(segdefs: &[Vec<u16>]) -> Vec<Node> {
             continue;
         }
 
-        let mut area = i64::from(seg[seg.len() - 2]) * i64::from(seg[4])
-            - i64::from(seg[3]) * i64::from(seg[seg.len() - 1]);
+        let mut area = i32::from(seg[seg.len() - 2]) * i32::from(seg[4])
+            - i32::from(seg[3]) * i32::from(seg[seg.len() - 1]);
         let mut j = 3;
         loop {
             if j + 4 >= seg.len() {
                 break;
             }
 
-            area += i64::from(seg[j]) * i64::from(seg[j + 3])
-                - i64::from(seg[j + 2]) * i64::from(seg[j - 1]);
+            area += i32::from(seg[j]) * i32::from(seg[j + 3])
+                - i32::from(seg[j + 2]) * i32::from(seg[j - 1]);
             j += 2;
         }
 
-        nodes[w_idx].area += area.abs();
+        nodes[w_idx].area = (Wrapping(nodes[w_idx].area) + Wrapping(area.abs())).0;
         nodes[w_idx].segs.push((seg[3], *seg.last().unwrap()))
     }
     nodes
@@ -1221,6 +1239,14 @@ fn verify_state<R: Read>(sim: &SimulationState, reader: &mut R) {
         println!("reference transistors count {} != transistors count {}", reference_transistors.len(), sim.transistors.len());
         return;
     }
+
+    for i in 0..NUM_TRANSISTORS {
+        if sim.transistors[i].on != reference_transistors[i] {
+            println!("Expected transistor {} to be {}, was {}", i, reference_transistors[i], sim.transistors[i].on);
+            return;
+        }
+    }
+
     for i in 0..NUM_NODES {
         let (floating, pulldown, pullup, state) = reference_nodes[i];
         let node = &sim.nodes[i];
@@ -1250,12 +1276,6 @@ fn verify_state<R: Read>(sim: &SimulationState, reader: &mut R) {
                 "State expected was {} but was {} at node {}",
                 state, node.state, i
             );
-            return;
-        }
-    }
-    for i in 0..NUM_TRANSISTORS {
-        if sim.transistors[i].on != reference_transistors[i] {
-            println!("Expected transistor {} to be {}, was {}", i, reference_transistors[i], sim.transistors[i].on);
             return;
         }
     }
@@ -1404,6 +1424,21 @@ mod tests {
                 .unwrap();
         });
         assert_eq!(reference_data, processed_data);
+    }
+
+    #[test]
+    fn nodes_reference_test() {
+        use std::io::Write;
+        unimplemented!();
+        //let reference_data = string_from_zip("test_data/transistors_reference.zip");
+        let conversion_table = id_conversion_table();
+        let seg_defs = load_segment_definitions(&conversion_table);
+        let trans_defs = load_transistor_definitions(&conversion_table);
+        let mut nodes = setup_nodes(&seg_defs);
+        let mut f = File::create("nodes_nessim.txt").unwrap();
+        for i in 0..nodes.len() {
+            f.write(format!("{} {}\r\n", nodes[i].num, nodes[i].area).as_bytes()).unwrap();
+        }
     }
 
     #[test]
