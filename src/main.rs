@@ -90,7 +90,6 @@ pub struct SimulationState {
     ppu_framebuffer: Box<[u32; 256 * 240]>,
     sprite_nodes: Vec<Vec<(i32, i32)>>,
     palette_nodes: Vec<Vec<(i32, i32)>>,
-    exec_count: usize,
 }
 
 impl SimulationState {
@@ -136,7 +135,6 @@ impl SimulationState {
             ppu_framebuffer: Box::new([0; 256 * 240]),
             sprite_nodes,
             palette_nodes,
-            exec_count: 0,
         }
     }
 
@@ -390,13 +388,7 @@ impl SimulationState {
                 panic!("Maximum loop exceeded")
             }
 
-            self.exec_count += 1;
-            let mut line = 0;
             for node_number in recalc_list.take().unwrap() {
-                line += 1;
-                if self.exec_count == 119 && line == 21 {
-                    println!("Break");
-                }
                 self.recalc_node(node_number);
             }
 
@@ -1179,12 +1171,18 @@ fn main() {
     println!("Verifying post load state");
     verify_state(&sim, &mut file);
     println!("Done verifying post load state");
-    //    for _ in 0..num_steps {
-    //        for _ in 0..half_cycles_per_step {
-    //            sim.half_step();
-    //        }
-    //    }
-    //    println!("{}", sim.transistors[0].on);
+    println!(
+        "Stepping {} times ({} half-cycles per step)",
+        num_steps, half_cycles_per_step
+    );
+    for i in 0..num_steps {
+        for _ in 0..half_cycles_per_step {
+            sim.half_step();
+        }
+        println!("Verifying after step {}", i);
+        verify_state(&sim, &mut file);
+        println!("Done verifying after step {}", i);
+    }
 }
 
 fn verify_state<R: Read>(sim: &SimulationState, reader: &mut R) {
@@ -1218,7 +1216,11 @@ fn verify_state<R: Read>(sim: &SimulationState, reader: &mut R) {
     }
 
     if reference_transistors.len() != sim.transistors.len() {
-        println!("reference transistors count {} != transistors count {}", reference_transistors.len(), sim.transistors.len());
+        println!(
+            "reference transistors count {} != transistors count {}",
+            reference_transistors.len(),
+            sim.transistors.len()
+        );
         return;
     }
     for i in 0..NUM_NODES {
@@ -1255,11 +1257,13 @@ fn verify_state<R: Read>(sim: &SimulationState, reader: &mut R) {
     }
     for i in 0..NUM_TRANSISTORS {
         if sim.transistors[i].on != reference_transistors[i] {
-            println!("Expected transistor {} to be {}, was {}", i, reference_transistors[i], sim.transistors[i].on);
+            println!(
+                "Expected transistor {} to be {}, was {}",
+                i, reference_transistors[i], sim.transistors[i].on
+            );
             return;
         }
     }
-
 }
 
 #[cfg(test)]
