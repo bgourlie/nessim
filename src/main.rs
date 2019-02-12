@@ -1269,7 +1269,7 @@ fn verify_state<R: Read>(sim: &SimulationState, reader: &mut R) {
 #[cfg(test)]
 mod tests {
     use crate::*;
-    use std::{fmt::Write, fs::File};
+    use std::fs::File;
 
     fn string_from_zip(file: &str) -> String {
         let reader = File::open(file).unwrap();
@@ -1289,15 +1289,12 @@ mod tests {
 
         conversion_table.sort_by(|(a1, _), (a2, _)| a1.cmp(a2));
 
-        let mut processed_data = String::new();
-        processed_data
-            .write_str(format!("Entries: {}\r\n", conversion_table.len()).as_str())
-            .unwrap();
-        conversion_table.iter().for_each(|(a, b)| {
-            processed_data
-                .write_str(format!("{},{}\r\n", a, b).as_str())
-                .unwrap();
-        });
+        let processed_data = conversion_table
+            .iter()
+            .map(|(a, b)| format!("{},{}", a, b))
+            .collect::<Vec<String>>()
+            .join("\r\n");
+
         assert_eq!(reference_data, processed_data);
     }
 
@@ -1306,21 +1303,17 @@ mod tests {
         let reference_data = string_from_zip("test_data/segment_definitions_reference.zip");
         let conversion_table = id_conversion_table();
         let seg_defs = load_segment_definitions(&conversion_table);
-        let mut processed_data = String::new();
-        processed_data
-            .write_str(format!("Entries: {}\r\n", seg_defs.len()).as_str())
-            .unwrap();
 
-        seg_defs.iter().for_each(|seg| {
-            let line = seg
-                .iter()
-                .map(|s| format!("{}", s))
-                .collect::<Vec<String>>()
-                .join(",");
-            processed_data
-                .write_str(format!("{}\r\n", line).as_str())
-                .unwrap();
-        });
+        let processed_data = seg_defs
+            .iter()
+            .map(|seg| {
+                seg.iter()
+                    .map(|s| format!("{}", s))
+                    .collect::<Vec<String>>()
+                    .join(",")
+            })
+            .collect::<Vec<String>>()
+            .join("\r\n");
         assert_eq!(reference_data, processed_data);
     }
 
@@ -1332,15 +1325,11 @@ mod tests {
 
         trans_defs.sort_by(|td1, td2| td1.name.cmp(&td2.name));
 
-        let mut processed_data = String::new();
-        processed_data
-            .write_str(format!("Entries: {}\r\n", trans_defs.len()).as_str())
-            .unwrap();
-        trans_defs.iter().for_each(|td| {
-            processed_data
-                .write_str(format!("{}:{},{},{}\r\n", td.name, td.c1, td.c2, td.gate).as_str())
-                .unwrap();
-        });
+        let processed_data = trans_defs
+            .iter()
+            .map(|td| format!("{}:{},{},{}", td.name, td.c1, td.c2, td.gate))
+            .collect::<Vec<String>>()
+            .join("\r\n");
         assert_eq!(reference_data, processed_data);
     }
 
@@ -1354,15 +1343,11 @@ mod tests {
                 .map(|(k, v)| format!("{},{}", k, v))
                 .collect();
 
-        let mut processed_data = String::new();
-        processed_data
-            .write_str(format!("Entries: {}\r\n", node_names.len()).as_str())
-            .unwrap();
-        node_names.iter().for_each(|l| {
-            processed_data
-                .write_str(format!("{}\r\n", l).as_str())
-                .unwrap();
-        });
+        let processed_data = node_names
+            .iter()
+            .map(|l| format!("{}", l))
+            .collect::<Vec<String>>()
+            .join("\r\n");
         assert_eq!(reference_data, processed_data);
     }
 
@@ -1371,20 +1356,16 @@ mod tests {
         let reference_data = string_from_zip("test_data/sprite_nodes_reference.zip");
         let (_, sprite_nodes) = load_ppu_nodes();
 
-        let mut processed_data = String::new();
-        processed_data
-            .write_str(format!("Entries: {}\r\n", sprite_nodes.len()).as_str())
-            .unwrap();
-        sprite_nodes.iter().for_each(|seg| {
-            let line = seg
-                .iter()
-                .map(|(i, j)| format!("{},{}", i, j))
-                .collect::<Vec<String>>()
-                .join("|");
-            processed_data
-                .write_str(format!("{}\r\n", line).as_str())
-                .unwrap();
-        });
+        let processed_data = sprite_nodes
+            .iter()
+            .map(|seg| {
+                seg.iter()
+                    .map(|(i, j)| format!("{},{}", i, j))
+                    .collect::<Vec<String>>()
+                    .join("|")
+            })
+            .collect::<Vec<String>>()
+            .join("\r\n");
         assert_eq!(reference_data, processed_data);
     }
 
@@ -1393,20 +1374,16 @@ mod tests {
         let reference_data = string_from_zip("test_data/palette_nodes_reference.zip");
         let (palette_nodes, _) = load_ppu_nodes();
 
-        let mut processed_data = String::new();
-        processed_data
-            .write_str(format!("Entries: {}\r\n", palette_nodes.len()).as_str())
-            .unwrap();
-        palette_nodes.iter().for_each(|seg| {
-            let line = seg
-                .iter()
-                .map(|(i, j)| format!("{},{}", i, j))
-                .collect::<Vec<String>>()
-                .join("|");
-            processed_data
-                .write_str(format!("{}\r\n", line).as_str())
-                .unwrap();
-        });
+        let processed_data = palette_nodes
+            .iter()
+            .map(|seg| {
+                seg.iter()
+                    .map(|(i, j)| format!("{},{}", i, j))
+                    .collect::<Vec<String>>()
+                    .join("|")
+            })
+            .collect::<Vec<String>>()
+            .join("\r\n");
         assert_eq!(reference_data, processed_data);
     }
 
@@ -1420,25 +1397,20 @@ mod tests {
 
         let (transistors, _, _, _) = setup_transistors(&mut nodes, trans_defs);
 
-        let mut processed_data = String::new();
-        processed_data
-            .write_str(format!("Entries: {}\r\n", transistors.len()).as_str())
-            .unwrap();
-        transistors.iter().for_each(|trans| {
-            processed_data
-                .write_str(
-                    format!(
-                        "{},{},{},{},{}\r\n",
-                        trans.name,
-                        trans.c1,
-                        trans.c2,
-                        trans.gate,
-                        if trans.on { 1 } else { 0 }
-                    )
-                    .as_str(),
+        let processed_data = transistors
+            .iter()
+            .map(|trans| {
+                format!(
+                    "{},{},{},{},{}",
+                    trans.name,
+                    trans.c1,
+                    trans.c2,
+                    trans.gate,
+                    if trans.on { 1 } else { 0 }
                 )
-                .unwrap();
-        });
+            })
+            .collect::<Vec<String>>()
+            .join("\r\n");
         assert_eq!(reference_data, processed_data);
     }
 
@@ -1452,15 +1424,11 @@ mod tests {
 
         let (_, node_counts, _, _) = setup_transistors(&mut nodes, trans_defs);
 
-        let mut processed_data = String::new();
-        processed_data
-            .write_str(format!("Entries: {}\r\n", node_counts.len()).as_str())
-            .unwrap();
-        node_counts.iter().for_each(|node| {
-            processed_data
-                .write_str(format!("{}\r\n", node).as_str())
-                .unwrap();
-        });
+        let processed_data = node_counts
+            .iter()
+            .map(|node| format!("{}", node))
+            .collect::<Vec<String>>()
+            .join("\r\n");
         assert_eq!(reference_data, processed_data);
     }
 
@@ -1473,20 +1441,18 @@ mod tests {
         let mut nodes = setup_nodes(&seg_defs);
         let (_, _, nodes_c1_c2, _) = setup_transistors(&mut nodes, trans_defs);
 
-        let mut processed_data = String::new();
-        processed_data
-            .write_str(format!("Entries: {}\r\n", nodes_c1_c2.len()).as_str())
-            .unwrap();
-        for nodes in nodes_c1_c2 {
-            let line = nodes
-                .iter()
-                .map(|n| format!("{}", n))
-                .collect::<Vec<String>>()
-                .join(",");
-            processed_data
-                .write_str(format!("{}\r\n", line).as_str())
-                .unwrap();
-        }
+        let processed_data = nodes_c1_c2
+            .iter()
+            .map(|nodes| {
+                nodes
+                    .iter()
+                    .map(|n| format!("{}", n))
+                    .collect::<Vec<String>>()
+                    .join(",")
+            })
+            .collect::<Vec<String>>()
+            .join("\r\n");
+
         assert_eq!(reference_data, processed_data);
     }
 
@@ -1504,15 +1470,11 @@ mod tests {
 
         transistor_index_by_name.sort_by(|(a1, _b1), (a2, _b2)| a1.cmp(a2));
 
-        let mut processed_data = String::new();
-        processed_data
-            .write_str(format!("Entries: {}\r\n", transistor_index_by_name.len()).as_str())
-            .unwrap();
-        transistor_index_by_name.iter().for_each(|(a, b)| {
-            processed_data
-                .write_str(format!("{},{}\r\n", a, b).as_str())
-                .unwrap();
-        });
+        let processed_data = transistor_index_by_name
+            .iter()
+            .map(|(a, b)| format!("{},{}", a, b))
+            .collect::<Vec<String>>()
+            .join("\r\n");
         assert_eq!(reference_data, processed_data);
     }
 
