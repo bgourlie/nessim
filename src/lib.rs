@@ -53,8 +53,6 @@ pub struct SimulationState {
     transistors: Vec<Transistor>,
     nodes_c1_c2: Vec<Vec<u16>>,
     processed_nodes: Vec<u16>,
-    recalc_lists: [Option<Vec<u16>>; 2],
-    cur_recalc_list_index: u8,
     step_cycle_count: u8,
     prev_ppu_ale: bool,
     prev_ppu_write: bool,
@@ -101,9 +99,7 @@ impl SimulationState {
             group: Vec::new(),
             transistors,
             nodes_c1_c2,
-            processed_nodes: Vec::new(),
-            recalc_lists: [Some(Vec::new()), Some(Vec::new())],
-            cur_recalc_list_index: 0,
+            processed_nodes: vec![0; NUM_NODES],
             step_cycle_count: 0,
             prev_ppu_ale: false,
             prev_ppu_read: true,
@@ -218,7 +214,7 @@ impl SimulationState {
 
         self.nodes[n1 as usize].state = true;
         self.nodes[n2 as usize].state = false;
-        self.recalc_node_list(Some(vec![n1 as u16, n2 as u16]));
+        self.recalc_node_list(&[n1 as u16, n2 as u16]);
     }
 
     fn all_nodes(&self) -> Vec<u16> {
@@ -281,7 +277,7 @@ impl SimulationState {
             self.set_high("cpu_irq");
             self.set_high("cpu_nmi");
 
-            self.recalc_node_list(Some(self.all_nodes()));
+            self.recalc_node_list(&self.all_nodes());
 
             for _ in 0..(12 * 8) {
                 self.set_high("clk0");
@@ -388,109 +384,82 @@ impl SimulationState {
         self.nodes[node_number as usize].state
     }
 
-    fn recalc_node_list(&mut self, mut recalc_list: Option<Vec<u16>>) {
-        if self.processed_nodes.is_empty() {
-            self.processed_nodes.extend_from_slice(&[0; NUM_NODES]);
-            self.recalc_lists[0] = Some(vec![100; 0]);
-            self.recalc_lists[1] = Some(vec![100; 0]);
-        } else {
-            self.recalc_lists[0] = Some(Vec::new());
-        }
-
-        self.cur_recalc_list_index = 0;
-
-        for j in 0..100 {
-            if j == 99 {
-                panic!("Maximum loop exceeded")
-            }
-
-            for node_number in recalc_list.take().unwrap() {
-                self.recalc_node(node_number);
-            }
-
-            if self.recalc_lists[self.cur_recalc_list_index as usize]
-                .as_ref()
-                .unwrap()
-                .is_empty()
-            {
-                return;
-            }
-
-            for node_number in self.recalc_lists[self.cur_recalc_list_index as usize]
-                .as_ref()
-                .unwrap()
-            {
-                self.processed_nodes[*node_number as usize] = 0;
-            }
-
-            recalc_list = Some(
-                self.recalc_lists[self.cur_recalc_list_index as usize]
-                    .take()
-                    .unwrap(),
-            );
-
-            self.cur_recalc_list_index = if self.cur_recalc_list_index == 0 {
-                1
-            } else {
-                0
-            };
-
-            self.recalc_lists[self.cur_recalc_list_index as usize] = Some(Vec::new());
-        }
+    fn recalc_node_list(&mut self, recalc_list: &[u16]) {
+        self.recalc_node_list_help(recalc_list, 0);
     }
 
-    fn recalc_node(&mut self, node_number: u16) {
-        if node_number == NGND || node_number == NPWR {
+    fn recalc_node_list_help(&mut self, recalc_list: &[u16], recurse_depth: usize) {
+        if recurse_depth >= 99 {
+            panic!("recurse depth exceeded");
+        }
+
+        let mut next_list = Vec::new();
+        for node_number in recalc_list {
+            next_list.extend_from_slice(&self.recalc_node(*node_number));
+        }
+
+        if next_list.is_empty() {
             return;
         }
 
-        self.get_node_group(node_number);
-        let new_state = self.get_node_value();
+        for node_number in &next_list {
+            self.processed_nodes[*node_number as usize] = 0;
+        }
 
-        // TODO(perf): Get rid of clone
-        for node_number in self.group.clone() {
-            let node_number = node_number as usize;
-            if self.nodes[node_number].state != new_state {
-                self.nodes[node_number].state = new_state;
-                // TODO(perf): Get rid of clone
-                for i in self.nodes[node_number].gates.clone() {
-                    if self.nodes[node_number].state {
-                        self.turn_transistor_on(i);
-                    } else {
-                        self.turn_transistor_off(i);
+        self.recalc_node_list_help(&next_list, recurse_depth + 1);
+    }
+
+    fn recalc_node(&mut self, node_number: u16) -> Vec<u16> {
+        if node_number == NGND || node_number == NPWR {
+            Vec::new()
+        } else {
+            self.get_node_group(node_number);
+            let new_state = self.get_node_value();
+            let mut recalc_node_list = Vec::new();
+
+            // TODO(perf): Get rid of clone
+            for node_number in self.group.clone() {
+                let node_number = node_number as usize;
+                if self.nodes[node_number].state != new_state {
+                    self.nodes[node_number].state = new_state;
+                    // TODO(perf): Get rid of clone
+                    for i in self.nodes[node_number].gates.clone() {
+                        if self.nodes[node_number].state {
+                            self.turn_transistor_on(i, &mut recalc_node_list);
+                        } else {
+                            self.turn_transistor_off(i, &mut recalc_node_list);
+                        }
                     }
                 }
             }
+            recalc_node_list
         }
     }
 
-    fn turn_transistor_on(&mut self, i: u16) {
+    fn turn_transistor_on(&mut self, i: u16, recalc_node_list: &mut Vec<u16>) {
         let i = i as usize;
         if !self.transistors[i].on {
             self.transistors[i].on = true;
-            self.add_recalc_node(self.transistors[i].c1);
+            self.add_recalc_node(self.transistors[i].c1, recalc_node_list);
         }
     }
 
-    fn turn_transistor_off(&mut self, i: u16) {
+    fn turn_transistor_off(&mut self, i: u16, recalc_node_list: &mut Vec<u16>) {
         let i = i as usize;
         if self.transistors[i].on {
             self.transistors[i].on = false;
-            self.add_recalc_node(self.transistors[i].c1);
-            self.add_recalc_node(self.transistors[i].c2);
+            self.add_recalc_node(self.transistors[i].c1, recalc_node_list);
+            self.add_recalc_node(self.transistors[i].c2, recalc_node_list);
         }
     }
 
-    fn add_recalc_node(&mut self, node_number: u16) {
+    fn add_recalc_node(&mut self, node_number: u16, recalc_node_list: &mut Vec<u16>) {
         if node_number == NGND || node_number == NPWR {
             return;
         }
 
         if self.processed_nodes[node_number as usize] == 0 {
-            self.recalc_lists[self.cur_recalc_list_index as usize]
-                .as_mut()
-                .unwrap()
-                .push(node_number);
+            recalc_node_list.push(node_number);
             self.processed_nodes[node_number as usize] = 1;
         }
     }
@@ -499,14 +468,14 @@ impl SimulationState {
         let node_number = self.node_number_by_name[node_name];
         self.nodes[node_number as usize].pullup = true;
         self.nodes[node_number as usize].pulldown = false;
-        self.recalc_node_list(Some(vec![node_number]))
+        self.recalc_node_list(&[node_number])
     }
 
     fn set_low(&mut self, node_name: &str) {
         let node_number = self.node_number_by_name[node_name];
         self.nodes[node_number as usize].pullup = false;
         self.nodes[node_number as usize].pulldown = true;
-        self.recalc_node_list(Some(vec![node_number]))
+        self.recalc_node_list(&[node_number])
     }
 
     fn read_bits(&mut self, name: &str, mut n: u8) -> u16 {
@@ -611,7 +580,7 @@ impl SimulationState {
             self.nodes[node_number as usize].pullup = false;
             recalc_nodes.push(node_number);
         }
-        self.recalc_node_list(Some(recalc_nodes));
+        self.recalc_node_list(&recalc_nodes);
     }
 
     /// Read byte at address in memory, returning the byte at that address and a boolean
@@ -703,7 +672,7 @@ impl SimulationState {
             x >>= 1;
         }
 
-        self.recalc_node_list(Some(recalc_nodes));
+        self.recalc_node_list(&recalc_nodes);
     }
 
     fn read_ppu_address_bus(&mut self) -> u16 {
