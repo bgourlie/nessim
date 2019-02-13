@@ -2,6 +2,9 @@ mod components;
 mod consts;
 mod preprocessor;
 
+#[cfg(test)]
+mod tests;
+
 use crate::{
     components::{Node, Transistor},
     consts::{
@@ -9,7 +12,6 @@ use crate::{
         SPRITE_RAM_SIZE,
     },
 };
-use byteorder::{LittleEndian, ReadBytesExt};
 use fnv::FnvHashMap;
 use std::io::Read;
 
@@ -766,129 +768,6 @@ impl SimulationState {
                 };
                 self.add_node_to_group(node_to_add);
             }
-        }
-    }
-}
-
-fn main() {
-    use std::fs::File;
-    let mut sim = SimulationState::new();
-
-    let mut file = File::open("C:\\Users\\bgour\\Desktop\\run.dat").unwrap();
-    println!("Verifying initial state");
-    verify_state(&sim, &mut file);
-    println!("Done verifying initial state");
-
-    sim.init(false);
-
-    println!("Verifying initialize state");
-    verify_state(&sim, &mut file);
-    println!("Done verifying initialize state");
-
-    let num_steps = file.read_i32::<LittleEndian>().unwrap();
-    let half_cycles_per_step = file.read_i32::<LittleEndian>().unwrap();
-
-    let mut prg_ram = vec![0_u8; 0x8000];
-    let mut chr_ram = vec![0_u8; 0x2000];
-    file.read_exact(&mut prg_ram).unwrap();
-    file.read_exact(&mut chr_ram).unwrap();
-
-    println!("Num Steps: {}", num_steps);
-    println!("Half Cycles Per Step: {}", half_cycles_per_step);
-    sim.set_memory_state(MemoryType::ChrRam, &chr_ram);
-    sim.set_memory_state(MemoryType::PrgRam, &prg_ram);
-    println!("Verifying post load state");
-    verify_state(&sim, &mut file);
-    println!("Done verifying post load state");
-    println!(
-        "Stepping {} times ({} half-cycles per step)",
-        num_steps, half_cycles_per_step
-    );
-    for i in 0..num_steps {
-        for _ in 0..half_cycles_per_step {
-            sim.half_step();
-        }
-        println!("Verifying after step {}", i);
-        verify_state(&sim, &mut file);
-        println!("Done verifying after step {}", i);
-    }
-}
-
-fn verify_state<R: Read>(sim: &SimulationState, reader: &mut R) {
-    let mut node_bytes = vec![0_u8; 16501];
-    reader.read_exact(&mut node_bytes).unwrap();
-    let mut reference_nodes = Vec::new();
-    for i in 0..NUM_NODES {
-        let byte_index = i / 2;
-        let bit_position = (i % 2) * 4;
-        let bits = node_bytes[byte_index] >> bit_position;
-        let floating = bits & 0b0000_0001 > 0;
-        let pulldown = bits & 0b0000_0010 > 0;
-        let pullup = bits & 0b0000_0100 > 0;
-        let state = bits & 0b0000_1000 > 0;
-        reference_nodes.push((floating, pulldown, pullup, state));
-    }
-
-    if reference_nodes.len() != sim.nodes.len() {
-        println!("reference node count != node count");
-        return;
-    };
-
-    let mut transistor_bytes = vec![0_u8; 3463];
-    reader.read_exact(&mut transistor_bytes).unwrap();
-    let mut reference_transistors = Vec::new();
-    for i in 0..NUM_TRANSISTORS {
-        let byte_index = i / 8;
-        let bit_position = i % 8;
-        let on = (transistor_bytes[byte_index] >> bit_position) & 1 > 0;
-        reference_transistors.push(on);
-    }
-
-    if reference_transistors.len() != sim.transistors.len() {
-        println!(
-            "reference transistors count {} != transistors count {}",
-            reference_transistors.len(),
-            sim.transistors.len()
-        );
-        return;
-    }
-    for (i, reference_node) in reference_nodes.iter().enumerate() {
-        let (floating, pulldown, pullup, state) = *reference_node;
-        let node = &sim.nodes[i];
-
-        if node.floating != floating {
-            println!(
-                "Floating expected was {} but was {} at node {}",
-                floating, node.floating, i
-            );
-            return;
-        } else if node.pullup != pullup {
-            println!(
-                "Pullup expected was {} but was {} at node {}",
-                pullup, node.pullup, i
-            );
-            return;
-        } else if node.pulldown != pulldown {
-            println!(
-                "Pulldown expected was {} but was {} at node {}",
-                pulldown, node.pulldown, i
-            );
-            return;
-        } else if node.state != state {
-            println!(
-                "State expected was {} but was {} at node {}",
-                state, node.state, i
-            );
-            return;
-        }
-    }
-    for (i, reference_transistor) in reference_transistors.iter().enumerate() {
-        if sim.transistors[i].on != *reference_transistor {
-            println!(
-                "Expected transistor {} to be {}, was {}",
-                i, reference_transistor, sim.transistors[i].on
-            );
-            return;
         }
     }
 }
