@@ -1,4 +1,5 @@
-use crate::*;
+use super::*;
+use crate::consts::NUM_NODES;
 use std::fs::File;
 
 fn string_from_zip(file: &str) -> String {
@@ -147,7 +148,6 @@ fn node_area_reference_test() {
     let reference_data = string_from_zip("test_data/node_area_reference.zip");
     let conversion_table = id_conversion_table();
     let seg_defs = load_segment_definitions(&conversion_table);
-    let trans_defs = load_transistor_definitions(&conversion_table);
     let nodes = setup_nodes(&seg_defs);
 
     let processed_data = nodes

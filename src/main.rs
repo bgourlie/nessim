@@ -1,39 +1,19 @@
-#![allow(unused_variables, dead_code)]
+mod components;
+mod consts;
+mod preprocessor;
+
+use crate::{
+    components::{Node, Transistor},
+    consts::{
+        EMPTYNODE, NGND, NPWR, NUMBERS, NUM_NODES, NUM_TRANSISTORS, PALETTE_ARGB, PALETTE_RAM_SIZE,
+        SPRITE_RAM_SIZE,
+    },
+};
 use byteorder::{LittleEndian, ReadBytesExt};
 use fnv::FnvHashMap;
-use std::{
-    fs::File,
-    io::{BufRead, BufReader, Read},
-};
+use std::io::Read;
 
-#[cfg(test)]
-mod preprocessing_tests;
-
-const SPRITE_RAM_SIZE: usize = 0x120;
-const PALETTE_RAM_SIZE: usize = 0x20;
-const NUM_NODES: usize = 33001;
-const NUM_TRANSISTORS: usize = 27703;
-const EMPTYNODE: u16 = 65535;
-const CPU_OFFSET: u16 = 13000;
-const NGND: u16 = 2;
-const NPWR: u16 = 1;
-const NUMBERS: [&str; 32] = [
-    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-    "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
-];
-
-#[allow(clippy::unreadable_literal)]
-const PALETTE_ARGB: [u32; 64] = [
-    0xFF666666, 0xFF002A88, 0xFF1412A7, 0xFF3B00A4, 0xFF5C007E, 0xFF6E0040, 0xFF6C0600, 0xFF561D00,
-    0xFF333500, 0xFF0B4800, 0xFF005200, 0xFF004F08, 0xFF00404D, 0xFF000000, 0xFF000000, 0xFF000000,
-    0xFFADADAD, 0xFF155FD9, 0xFF4240FF, 0xFF7527FE, 0xFFA01ACC, 0xFFB71E7B, 0xFFB53120, 0xFF994E00,
-    0xFF6B6D00, 0xFF388700, 0xFF0C9300, 0xFF008F32, 0xFF007C8D, 0xFF000000, 0xFF000000, 0xFF000000,
-    0xFFFFFEFF, 0xFF64B0FF, 0xFF9290FF, 0xFFC676FF, 0xFFF36AFF, 0xFFFE6ECC, 0xFFFE8170, 0xFFEA9E22,
-    0xFFBCBE00, 0xFF88D800, 0xFF5CE430, 0xFF45E082, 0xFF48CDDE, 0xFF4F4F4F, 0xFF000000, 0xFF000000,
-    0xFFFFFEFF, 0xFFC0DFFF, 0xFFD3D2FF, 0xFFE8C8FF, 0xFFFBC2FF, 0xFFFEC4EA, 0xFFFECCC5, 0xFFF7D8A5,
-    0xFFE4E594, 0xFFCFEF96, 0xFFBDF4AB, 0xFFB3F3CC, 0xFFB5EBF2, 0xFFB8B8B8, 0xFF000000, 0xFF000000,
-];
-
+#[allow(dead_code)]
 enum MemoryType {
     /// $0000-$07FF (mirrored to $1FFF)
     CpuRam,
@@ -52,6 +32,7 @@ enum MemoryType {
     FullState,
 }
 
+#[allow(dead_code)]
 enum MirroringType {
     Horizontal,
     Vertical,
@@ -96,15 +77,20 @@ pub struct SimulationState {
 }
 
 impl SimulationState {
-    pub fn new(
-        nodes: Vec<Node>,
-        node_counts: Vec<u8>,
-        node_number_by_name: FnvHashMap<String, u16>,
-        nodes_c1_c2: Vec<Vec<u16>>,
-        sprite_nodes: Vec<Vec<(i32, i32)>>,
-        palette_nodes: Vec<Vec<(i32, i32)>>,
-        transistors: Vec<Transistor>,
-    ) -> Self {
+    pub fn new() -> Self {
+        use crate::preprocessor::{
+            id_conversion_table, load_node_number_by_name_map, load_ppu_nodes,
+            load_segment_definitions, load_transistor_definitions, setup_nodes, setup_transistors,
+        };
+        let conversion_table = id_conversion_table();
+        let seg_defs = load_segment_definitions(&conversion_table);
+        let trans_defs = load_transistor_definitions(&conversion_table);
+        let mut nodes = setup_nodes(&seg_defs);
+        let (palette_nodes, sprite_nodes) = load_ppu_nodes();
+        let (transistors, node_counts, nodes_c1_c2, _) = setup_transistors(&mut nodes, trans_defs);
+
+        let node_number_by_name = load_node_number_by_name_map(&conversion_table);
+
         SimulationState {
             cycle: 0,
             nodes,
@@ -223,7 +209,7 @@ impl SimulationState {
 
         if soft_reset {
             self.set_low("res");
-            for i in 0..=(12 * 8 * 2) {
+            for _ in 0..=(12 * 8 * 2) {
                 if self.is_node_high(self.node_number_by_name["clk0"]) {
                     self.set_low("clk0");
                 } else {
@@ -259,7 +245,7 @@ impl SimulationState {
             self.set_high("io_ce");
             self.set_high("int");
 
-            for i in 0..6 {
+            for _ in 0..6 {
                 self.set_high("clk0");
                 self.set_low("clk0");
             }
@@ -270,7 +256,7 @@ impl SimulationState {
 
             self.recalc_node_list(Some(self.all_nodes()));
 
-            for i in 0..(12 * 8) {
+            for _ in 0..(12 * 8) {
                 self.set_high("clk0");
                 self.set_low("clk0");
             }
@@ -784,369 +770,9 @@ impl SimulationState {
     }
 }
 
-pub struct TransistorDefinition {
-    name: String,
-    gate: u16,
-    c1: u16,
-    c2: u16,
-}
-
-pub struct Transistor {
-    on: bool,
-    c1: u16,
-    c2: u16,
-    gate: u16,
-    name: String,
-}
-
-#[derive(Clone)]
-pub struct Node {
-    state: bool,
-    pullup: bool,
-    pulldown: bool,
-    floating: bool,
-    area: i64,
-    num: u16,
-    gates: Vec<u16>,
-    segs: Vec<(u16, u16)>,
-}
-
-impl Default for Node {
-    fn default() -> Self {
-        Node {
-            state: false,
-            pullup: false,
-            pulldown: false,
-            floating: true,
-            area: 0,
-            num: EMPTYNODE,
-            gates: Vec::new(),
-            segs: Vec::new(),
-        }
-    }
-}
-
-pub fn id_conversion_table() -> FnvHashMap<u16, u16> {
-    let mut map = FnvHashMap::default();
-    map.insert(10000 + CPU_OFFSET, 1); // vcc
-    map.insert(10001 + CPU_OFFSET, 2); // vss
-    map.insert(10004 + CPU_OFFSET, 1934); // reset
-
-    map.insert(11669 + CPU_OFFSET, 772); // cpu_clk_in -> clk0
-
-    map.insert(1013, 11819 + CPU_OFFSET); // io_db0 -> cpu_db0
-    map.insert(765, 11966 + CPU_OFFSET); // db1
-    map.insert(431, 12056 + CPU_OFFSET); // db2
-    map.insert(87, 12091 + CPU_OFFSET); // db3
-    map.insert(11, 12090 + CPU_OFFSET); // db4
-    map.insert(10, 12089 + CPU_OFFSET); // db5
-    map.insert(9, 12088 + CPU_OFFSET); // db6
-    map.insert(8, 12087 + CPU_OFFSET); // db7
-
-    map.insert(12, 10020 + CPU_OFFSET); // io_ab0 -> cpu_ab0
-    map.insert(6, 10019 + CPU_OFFSET); // io_ab1 -> cpu_ab1
-    map.insert(7, 10030 + CPU_OFFSET); // io_ab2 -> cpu_ab2
-
-    map.insert(10331 + CPU_OFFSET, 1031); // nmi -> int
-    map.insert(10092 + CPU_OFFSET, 1224); // cpu_rw -> io_rw
-
-    map
-}
-
-fn convert_id(id: u16, conversion_table: &FnvHashMap<u16, u16>) -> u16 {
-    *conversion_table.get(&id).unwrap_or(&id)
-}
-
-fn load_segment_definitions(conversion_table: &FnvHashMap<u16, u16>) -> Vec<Vec<u16>> {
-    fn load_from_file<R: Read>(
-        reader: R,
-        segment_id_offset: u16,
-        conversion_table: &FnvHashMap<u16, u16>,
-    ) -> Vec<Vec<u16>> {
-        BufReader::new(reader)
-            .lines()
-            .map(|line| {
-                let values = line
-                    .unwrap()
-                    .split(',')
-                    .map(|seg| seg.parse::<u16>().unwrap())
-                    .collect::<Vec<u16>>();
-
-                let mut seg_def = Vec::with_capacity(values.len());
-
-                let id = values[0];
-                seg_def.push(convert_id(id + segment_id_offset, conversion_table));
-                if values.len() > 1 {
-                    seg_def.extend_from_slice(&values[1..]);
-                }
-
-                seg_def
-            })
-            .collect::<Vec<Vec<u16>>>()
-    }
-
-    let mut seg_defs = load_from_file(File::open("data/segdefs.txt").unwrap(), 0, conversion_table);
-
-    let cpu_seg_defs = load_from_file(
-        File::open("data/cpusegdefs.txt").unwrap(),
-        CPU_OFFSET,
-        conversion_table,
-    );
-
-    seg_defs.extend(cpu_seg_defs);
-    seg_defs
-}
-fn load_transistor_definitions(
-    conversion_table: &FnvHashMap<u16, u16>,
-) -> Vec<TransistorDefinition> {
-    fn load_from_file<R: Read>(
-        reader: R,
-        name_prefix: &str,
-        segment_id_offset: u16,
-        conversion_table: &FnvHashMap<u16, u16>,
-    ) -> Vec<TransistorDefinition> {
-        BufReader::new(reader)
-            .lines()
-            .map(|line| {
-                let values = line
-                    .unwrap()
-                    .split(',')
-                    .map(|val| val.to_owned())
-                    .collect::<Vec<String>>();
-                TransistorDefinition {
-                    name: format!("{}{}", name_prefix, values[0]),
-                    gate: convert_id(
-                        values[1].parse::<u16>().unwrap() + segment_id_offset,
-                        conversion_table,
-                    ),
-                    c1: convert_id(
-                        values[2].parse::<u16>().unwrap() + segment_id_offset,
-                        conversion_table,
-                    ),
-                    c2: convert_id(
-                        values[3].parse::<u16>().unwrap() + segment_id_offset,
-                        conversion_table,
-                    ),
-                }
-            })
-            .collect()
-    }
-
-    let mut trans_defs = load_from_file(
-        File::open("data/transdefs.txt").unwrap(),
-        "",
-        0,
-        conversion_table,
-    );
-
-    let cpu_transistor_defs = load_from_file(
-        File::open("data/cputransdefs.txt").unwrap(),
-        "cpu_",
-        CPU_OFFSET,
-        conversion_table,
-    );
-
-    trans_defs.extend(cpu_transistor_defs);
-    trans_defs
-}
-
-fn setup_node_names_by_number_map(node_names: &FnvHashMap<String, u16>) -> FnvHashMap<u16, String> {
-    node_names.iter().map(|(k, v)| (*v, k.clone())).collect()
-}
-
-fn load_node_number_by_name_map(
-    conversion_table: &FnvHashMap<u16, u16>,
-) -> FnvHashMap<String, u16> {
-    fn load_from_file<R: Read>(
-        reader: R,
-        name_prefix: &str,
-        segment_id_offset: u16,
-        conversion_table: &FnvHashMap<u16, u16>,
-    ) -> FnvHashMap<String, u16> {
-        BufReader::new(reader)
-            .lines()
-            .map(|line| {
-                let values = line
-                    .unwrap()
-                    .split(',')
-                    .map(|s| s.trim().to_owned())
-                    .collect::<Vec<String>>();
-
-                let id = (values[1].parse::<i64>().unwrap() + i64::from(segment_id_offset)) as u16;
-                (
-                    format!("{}{}", name_prefix, values[0]),
-                    convert_id(id, conversion_table),
-                )
-            })
-            .collect::<FnvHashMap<String, u16>>()
-    }
-
-    let mut node_names = load_from_file(
-        File::open("data/nodenames.txt").unwrap(),
-        "",
-        0,
-        conversion_table,
-    );
-
-    let cpu_node_names = load_from_file(
-        File::open("data/cpunodenames.txt").unwrap(),
-        "cpu_",
-        CPU_OFFSET,
-        conversion_table,
-    );
-
-    node_names.extend(cpu_node_names);
-
-    node_names
-}
-
-#[allow(clippy::type_complexity)]
-fn load_ppu_nodes() -> (Vec<Vec<(i32, i32)>>, Vec<Vec<(i32, i32)>>) {
-    fn load_from_file<R: Read>(reader: R) -> Vec<Vec<(i32, i32)>> {
-        BufReader::new(reader)
-            .lines()
-            .map(|line| {
-                line.unwrap()
-                    .split(',')
-                    .map(|values| {
-                        let value = values.split('|').collect::<Vec<&str>>();
-                        (
-                            value[0].parse::<i32>().unwrap(),
-                            value[1].parse::<i32>().unwrap(),
-                        )
-                    })
-                    .collect::<Vec<(i32, i32)>>()
-            })
-            .collect()
-    }
-
-    let palette_nodes = load_from_file(File::open("data/palettenodes.txt").unwrap());
-    let sprite_nodes = load_from_file(File::open("data/spritenodes.txt").unwrap());
-
-    (palette_nodes, sprite_nodes)
-}
-
-fn setup_nodes(segdefs: &[Vec<u16>]) -> Vec<Node> {
-    let max_id = usize::from(
-        segdefs
-            .iter()
-            .max_by(|seg1, seg2| seg1[0].cmp(&seg2[0]))
-            .unwrap()[0],
-    );
-    let mut nodes = vec![Node::default(); max_id + 1];
-    for seg in segdefs.iter() {
-        let w = seg[0];
-        let w_idx = w as usize;
-        if nodes[w_idx].num == EMPTYNODE {
-            nodes[w_idx].num = w as _;
-            nodes[w_idx].pullup = seg[1] == 1;
-            nodes[w_idx].state = false;
-            nodes[w_idx].area = 0;
-        }
-
-        if w == NGND || w == NPWR {
-            continue;
-        }
-
-        let mut area = i64::from(seg[seg.len() - 2]) * i64::from(seg[4])
-            - i64::from(seg[3]) * i64::from(seg[seg.len() - 1]);
-        let mut j = 3;
-        loop {
-            if j + 4 >= seg.len() {
-                break;
-            }
-
-            area += i64::from(seg[j]) * i64::from(seg[j + 3])
-                - i64::from(seg[j + 2]) * i64::from(seg[j - 1]);
-            j += 2;
-        }
-
-        nodes[w_idx].area += area.abs();
-        nodes[w_idx].segs.push((seg[3], *seg.last().unwrap()))
-    }
-    nodes
-}
-
-#[allow(clippy::type_complexity)]
-fn setup_transistors(
-    nodes: &mut Vec<Node>,
-    trans_defs: Vec<TransistorDefinition>,
-) -> (
-    Vec<Transistor>,
-    Vec<u8>,
-    Vec<Vec<u16>>,
-    FnvHashMap<String, u16>,
-) {
-    const MAX_NODES: usize = 34000;
-    const MAX_C1_C2: usize = 95;
-    let mut node_counts = vec![0_u8; MAX_NODES];
-    let mut nodes_c1_c2 = vec![vec![0_u16; MAX_C1_C2]; MAX_NODES];
-    let mut transistors = Vec::new();
-    let mut transistor_index_by_name = FnvHashMap::<String, u16>::default();
-    for (i, trans_def) in trans_defs.into_iter().enumerate() {
-        let mut c1 = trans_def.c1;
-        let mut c2 = trans_def.c2;
-        let name = trans_def.name;
-        let gate = trans_def.gate;
-
-        if c1 == NGND {
-            c1 = c2;
-            c2 = NGND;
-        }
-
-        if c1 == NPWR {
-            c1 = c2;
-            c2 = NPWR;
-        }
-
-        nodes[gate as usize].gates.push(i as u16);
-        if c1 != NPWR && c1 != NGND {
-            nodes_c1_c2[c1 as usize][node_counts[c1 as usize] as usize] = i as u16;
-            node_counts[c1 as usize] += 1;
-        }
-
-        if c2 != NPWR && c2 != NGND {
-            nodes_c1_c2[c2 as usize][node_counts[c2 as usize] as usize] = i as u16;
-            node_counts[c2 as usize] += 1;
-        }
-
-        transistors.push(Transistor {
-            c1,
-            c2,
-            gate,
-            on: false,
-            name: name.clone(),
-        });
-        transistor_index_by_name.insert(name, i as u16);
-    }
-    println!("Transistor count: {}", transistors.len());
-    (
-        transistors,
-        node_counts,
-        nodes_c1_c2,
-        transistor_index_by_name,
-    )
-}
-
 fn main() {
-    let conversion_table = id_conversion_table();
-    let seg_defs = load_segment_definitions(&conversion_table);
-    let trans_defs = load_transistor_definitions(&conversion_table);
-    let mut nodes = setup_nodes(&seg_defs);
-    let (palette_nodes, sprite_nodes) = load_ppu_nodes();
-    let (transistors, node_counts, nodes_c1_c2, transistor_index_by_name) =
-        setup_transistors(&mut nodes, trans_defs);
-
-    let node_number_number_by_name = load_node_number_by_name_map(&conversion_table);
-    let mut sim = SimulationState::new(
-        nodes,
-        node_counts,
-        node_number_number_by_name,
-        nodes_c1_c2,
-        sprite_nodes,
-        palette_nodes,
-        transistors,
-    );
+    use std::fs::File;
+    let mut sim = SimulationState::new();
 
     let mut file = File::open("C:\\Users\\bgour\\Desktop\\run.dat").unwrap();
     println!("Verifying initial state");
