@@ -8,12 +8,11 @@ mod tests;
 use crate::{
     components::{Node, Transistor},
     consts::{
-        EMPTYNODE, NGND, NPWR, NUMBERS, NUM_NODES, NUM_TRANSISTORS, PALETTE_ARGB, PALETTE_RAM_SIZE,
-        SPRITE_RAM_SIZE,
+        EMPTYNODE, NGND, NPWR, NUMBERS, NUM_NODES, PALETTE_ARGB, PALETTE_RAM_SIZE, SPRITE_RAM_SIZE,
     },
 };
 use fnv::FnvHashMap;
-use std::io::Read;
+use std::io::{Read, Seek};
 
 #[allow(dead_code)]
 enum MemoryType {
@@ -127,6 +126,34 @@ impl SimulationState {
             sprite_nodes,
             palette_nodes,
         }
+    }
+
+    pub fn load_rom<R: Read + Seek>(&mut self, input: &mut R) {
+        use nes_rom_loader::{Mirroring, NesRom};
+        // TODO: Return Result so failure can be handled gracefully
+        let rom = NesRom::load(input).unwrap();
+
+        if rom.mapper != 0 {
+            panic!("Only mapper 0 is supported");
+        }
+
+        let mirroring_type = match rom.mirroring {
+            Mirroring::Horizontal => MirroringType::Horizontal,
+            Mirroring::Vertical => MirroringType::Vertical,
+            _ => unimplemented!(),
+        };
+
+        self.mirroring_type = mirroring_type;
+
+        let mut prg = rom.prg.clone();
+
+        if prg.len() == 0x4000 {
+            prg.extend_from_slice(&rom.prg);
+        }
+
+        self.init(false);
+        self.set_memory_state(MemoryType::ChrRam, &rom.chr);
+        self.set_memory_state(MemoryType::PrgRam, &prg);
     }
 
     fn set_memory_state(&mut self, memory_type: MemoryType, buffer: &[u8]) {
@@ -273,7 +300,7 @@ impl SimulationState {
         self.prev_ppu_ale = false;
     }
 
-    fn half_step(&mut self) {
+    pub fn half_step(&mut self) {
         let cpu_clk0 = self.is_node_high(self.node_number_by_name["cpu_clk0"]);
         let clk = self.is_node_high(self.node_number_by_name["clk0"]);
 

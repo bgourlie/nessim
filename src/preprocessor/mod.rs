@@ -307,7 +307,7 @@ pub fn setup_transistors(
         });
         transistor_index_by_name.insert(name, i as u16);
     }
-    println!("Transistor count: {}", transistors.len());
+
     (
         transistors,
         node_counts,

@@ -1,5 +1,6 @@
-use super::*;
+use crate::{consts::NUM_TRANSISTORS, MemoryType, SimulationState, NUM_NODES};
 use byteorder::{LittleEndian, ReadBytesExt};
+use std::io::Read;
 
 #[test]
 fn reference_tests() {
