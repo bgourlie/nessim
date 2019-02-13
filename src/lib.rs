@@ -52,7 +52,7 @@ pub struct SimulationState {
     node_counts: Vec<u8>,
     transistors: Vec<Transistor>,
     nodes_c1_c2: Vec<Vec<u16>>,
-    processed_nodes: Vec<u16>,
+    processed_nodes: Box<[bool; NUM_NODES]>,
     step_cycle_count: u8,
     prev_ppu_ale: bool,
     prev_ppu_write: bool,
@@ -99,7 +99,7 @@ impl SimulationState {
             group: Vec::new(),
             transistors,
             nodes_c1_c2,
-            processed_nodes: vec![0; NUM_NODES],
+            processed_nodes: Box::new([false; NUM_NODES]),
             step_cycle_count: 0,
             prev_ppu_ale: false,
             prev_ppu_read: true,
@@ -403,7 +403,7 @@ impl SimulationState {
         }
 
         for node_number in &next_list {
-            self.processed_nodes[*node_number as usize] = 0;
+            self.processed_nodes[*node_number as usize] = false;
         }
 
         self.recalc_node_list_help(&next_list, recurse_depth + 1);
@@ -458,9 +458,9 @@ impl SimulationState {
             return;
         }
 
-        if self.processed_nodes[node_number as usize] == 0 {
+        if !self.processed_nodes[node_number as usize] {
             recalc_node_list.push(node_number);
-            self.processed_nodes[node_number as usize] = 1;
+            self.processed_nodes[node_number as usize] = true;
         }
     }
 
