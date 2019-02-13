@@ -416,7 +416,6 @@ impl SimulationState {
             return;
         }
 
-        // TODO: Start investigating here
         self.get_node_group(node_number);
         let new_state = self.get_node_value();
 
