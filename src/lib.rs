@@ -335,12 +335,12 @@ impl SimulationState {
             if hpos != self.prev_hpos {
                 let vpos = self.read_bits("vpos", 0);
                 if hpos >= 0 && hpos < 256 && vpos < 240 {
-                    let palette_entry = self.read_bit("pal_d0_out")
-                        | (self.read_bit("pal_d1_out") << 1)
-                        | (self.read_bit("pal_d2_out") << 2)
-                        | (self.read_bit("pal_d3_out") << 3)
-                        | (self.read_bit("pal_d4_out") << 4)
-                        | (self.read_bit("pal_d5_out") << 5);
+                    let palette_entry = self.read_bit(NODE_PAL_D0_OUT)
+                        | (self.read_bit(NODE_PAL_D1_OUT) << 1)
+                        | (self.read_bit(NODE_PAL_D2_OUT) << 2)
+                        | (self.read_bit(NODE_PAL_D3_OUT) << 3)
+                        | (self.read_bit(NODE_PAL_D4_OUT) << 4)
+                        | (self.read_bit(NODE_PAL_D5_OUT) << 5);
                     self.ppu_framebuffer[((vpos << 8) | (hpos as u16)) as usize] =
                         PALETTE_ARGB[palette_entry as usize];
                 }
@@ -483,7 +483,7 @@ impl SimulationState {
             if n == 0 {
                 let last_char = name.chars().last().unwrap();
                 if last_char >= '0' && last_char <= '9' {
-                    return u16::from(self.read_bit(name));
+                    return u16::from(self.read_bit(self.node_number_by_name[name]));
                 } else {
                     if let Some(bit_count) = self.bit_count_cache.get(name) {
                         n = *bit_count;
@@ -507,7 +507,7 @@ impl SimulationState {
                     }
 
                     if n == 1 {
-                        return u16::from(self.read_bit(name));
+                        return u16::from(self.read_bit(self.node_number_by_name[name]));
                     }
                 }
                 for (i, nn) in self.node_number_cache[name].iter().enumerate() {
@@ -524,8 +524,8 @@ impl SimulationState {
         }
     }
 
-    fn read_bit(&self, name: &str) -> u8 {
-        self.is_node_high(self.node_number_by_name[name]) as u8
+    fn read_bit(&self, node_number: u16) -> u8 {
+        self.is_node_high(node_number) as u8
     }
 
     fn handle_chr_bus(&mut self) {

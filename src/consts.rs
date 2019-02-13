@@ -20,6 +20,12 @@ pub const NODE_CPU_AB13: u16 = 25083;
 pub const NODE_CPU_AB14: u16 = 25085;
 pub const NODE_CPU_AB15: u16 = 25086;
 pub const NODE_CPU_RW: u16 = 1224;
+pub const NODE_PAL_D0_OUT: u16 = 1215;
+pub const NODE_PAL_D1_OUT: u16 = 6565;
+pub const NODE_PAL_D2_OUT: u16 = 6566;
+pub const NODE_PAL_D3_OUT: u16 = 6567;
+pub const NODE_PAL_D4_OUT: u16 = 6564;
+pub const NODE_PAL_D5_OUT: u16 = 6568;
 
 pub const NUMBERS: [&str; 32] = [
     "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",

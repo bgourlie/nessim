@@ -291,4 +291,28 @@ fn node_constant_tests() {
         node_number_by_name_map["cpu_rw"], NODE_CPU_RW,
         "Wrong CPU_RW constant value"
     );
+    assert_eq!(
+        node_number_by_name_map["pal_d0_out"], NODE_PAL_D0_OUT,
+        "Wrong PAL_D0_OUT constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["pal_d1_out"], NODE_PAL_D1_OUT,
+        "Wrong PAL_D1_OUT constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["pal_d2_out"], NODE_PAL_D2_OUT,
+        "Wrong PAL_D2_OUT constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["pal_d3_out"], NODE_PAL_D3_OUT,
+        "Wrong PAL_D3_OUT constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["pal_d4_out"], NODE_PAL_D4_OUT,
+        "Wrong PAL_D4_OUT constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["pal_d5_out"], NODE_PAL_D5_OUT,
+        "Wrong PAL_D5_OUT constant value"
+    );
 }
