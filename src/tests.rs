@@ -86,34 +86,49 @@ fn verify_state<R: Read>(sim: &SimulationState, reader: &mut R) {
         let node = &sim.nodes[i];
 
         assert_eq!(
-            floating, node.floating,
+            floating,
+            node.floating.get(),
             "Floating expected was {} but was {} at node {}",
-            floating, node.floating, i
+            floating,
+            node.floating.get(),
+            i
         );
 
         assert_eq!(
-            pullup, node.pullup,
+            pullup,
+            node.pullup.get(),
             "Pullup expected was {} but was {} at node {}",
-            pullup, node.pullup, i
+            pullup,
+            node.pullup.get(),
+            i
         );
 
         assert_eq!(
-            pullup, node.pullup,
+            pullup,
+            node.pullup.get(),
             "Pulldown expected was {} but was {} at node {}",
-            pulldown, node.pulldown, i
+            pulldown,
+            node.pulldown.get(),
+            i
         );
 
         assert_eq!(
-            state, node.state,
+            state,
+            node.state.get(),
             "State expected was {} but was {} at node {}",
-            state, node.state, i
+            state,
+            node.state.get(),
+            i
         );
     }
     for (i, reference_transistor) in reference_transistors.iter().enumerate() {
         assert_eq!(
-            *reference_transistor, sim.transistors[i].on,
+            *reference_transistor,
+            sim.transistors[i].on.get(),
             "Expected transistor {} to be {}, was {}",
-            i, reference_transistor, sim.transistors[i].on
+            i,
+            reference_transistor,
+            sim.transistors[i].on.get()
         );
     }
 }

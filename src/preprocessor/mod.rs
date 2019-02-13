@@ -7,6 +7,7 @@ use crate::{
 };
 use fnv::FnvHashMap;
 use std::{
+    cell::Cell,
     fs::File,
     io::{BufRead, BufReader, Read},
 };
@@ -227,8 +228,8 @@ pub fn setup_nodes(segdefs: &[Vec<u16>]) -> Vec<Node> {
         let w_idx = w as usize;
         if nodes[w_idx].num == EMPTYNODE {
             nodes[w_idx].num = w as _;
-            nodes[w_idx].pullup = seg[1] == 1;
-            nodes[w_idx].state = false;
+            nodes[w_idx].pullup.set(seg[1] == 1);
+            nodes[w_idx].state.set(false);
             nodes[w_idx].area = 0;
         }
 
@@ -302,7 +303,7 @@ pub fn setup_transistors(
             c1,
             c2,
             gate,
-            on: false,
+            on: Cell::new(false),
             name: name.clone(),
         });
         transistor_index_by_name.insert(name, i as u16);

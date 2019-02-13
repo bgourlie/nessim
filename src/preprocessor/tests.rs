@@ -135,7 +135,7 @@ fn transistors_reference_test() {
                 trans.c1,
                 trans.c2,
                 trans.gate,
-                if trans.on { 1 } else { 0 }
+                if trans.on.get() { 1 } else { 0 }
             )
         })
         .collect::<Vec<String>>()
