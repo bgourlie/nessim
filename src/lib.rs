@@ -55,7 +55,6 @@ pub struct SimulationState {
     processed_nodes: Vec<u16>,
     recalc_lists: [Option<Vec<u16>>; 2],
     cur_recalc_list_index: u8,
-    group_empty: bool,
     step_cycle_count: u8,
     prev_ppu_ale: bool,
     prev_ppu_write: bool,
@@ -105,7 +104,6 @@ impl SimulationState {
             processed_nodes: Vec::new(),
             recalc_lists: [Some(Vec::new()), Some(Vec::new())],
             cur_recalc_list_index: 0,
-            group_empty: true,
             step_cycle_count: 0,
             prev_ppu_ale: false,
             prev_ppu_read: true,
@@ -410,7 +408,11 @@ impl SimulationState {
                 self.recalc_node(node_number);
             }
 
-            if self.group_empty {
+            if self.recalc_lists[self.cur_recalc_list_index as usize]
+                .as_ref()
+                .unwrap()
+                .is_empty()
+            {
                 return;
             }
 
@@ -434,7 +436,6 @@ impl SimulationState {
             };
 
             self.recalc_lists[self.cur_recalc_list_index as usize] = Some(Vec::new());
-            self.group_empty = true;
         }
     }
 
@@ -492,8 +493,6 @@ impl SimulationState {
                 .push(node_number);
             self.processed_nodes[node_number as usize] = 1;
         }
-
-        self.group_empty = false;
     }
 
     fn set_high(&mut self, node_name: &str) {
