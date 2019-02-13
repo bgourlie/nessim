@@ -357,9 +357,9 @@ impl SimulationState {
             let (d, open_bus) = self.cpu_read(a);
 
             if open_bus {
-                self.float_bits("cpu_db", 8);
+                self.float_byte("cpu_db");
             } else {
-                self.write_bits("cpu_db", 8, u16::from(d));
+                self.write_byte("cpu_db", u16::from(d));
             }
         }
     }
@@ -540,12 +540,12 @@ impl SimulationState {
 
         // falling edge of /RD - put bits on bus
         if self.prev_ppu_read && !rd {
-            self.write_bits("db", 8, u16::from(self.ppu_read(self.chr_address)));
+            self.write_byte("db", u16::from(self.ppu_read(self.chr_address)));
         }
 
         // rising edge of /RD - flaot the data bus
         if !self.prev_ppu_read && rd {
-            self.float_bits("db", 8);
+            self.float_byte("db");
         }
 
         // rising edge of /WR - store data in RAM
@@ -567,13 +567,13 @@ impl SimulationState {
         self.last_data
     }
 
-    fn float_bits(&mut self, name: &str, n: u16) {
-        let mut recalc_nodes = Vec::with_capacity(n as usize);
-        for i in 0..n {
+    fn float_byte(&mut self, name: &str) {
+        let mut recalc_nodes = [0_u16; 8];
+        for i in 0..8 {
             let node_number = self.node_number_by_name[format!("{}{}", name, i).as_str()];
             self.nodes[node_number as usize].pulldown.set(false);
             self.nodes[node_number as usize].pullup.set(false);
-            recalc_nodes.push(node_number);
+            recalc_nodes[i as usize] = node_number;
         }
         self.recalc_node_list(&recalc_nodes);
     }
@@ -652,9 +652,9 @@ impl SimulationState {
         }
     }
 
-    fn write_bits(&mut self, name: &str, n: u16, mut x: u16) {
-        let mut recalc_nodes = Vec::with_capacity(n as usize);
-        for i in 0..n {
+    fn write_byte(&mut self, name: &str, mut x: u16) {
+        let mut recalc_nodes = [0_u16; 8];
+        for i in 0..8 {
             let node_number = self.node_number_by_name[format!("{}{}", name, i).as_str()];
             if x % 2 == 0 {
                 self.nodes[node_number as usize].pulldown.set(true);
@@ -663,7 +663,7 @@ impl SimulationState {
                 self.nodes[node_number as usize].pulldown.set(false);
                 self.nodes[node_number as usize].pullup.set(true);
             }
-            recalc_nodes.push(node_number);
+            recalc_nodes[i as usize] = node_number;
             x >>= 1;
         }
 
