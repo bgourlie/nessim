@@ -3,7 +3,7 @@ mod tests;
 
 use crate::{
     components::{Node, Transistor},
-    consts::{CPU_OFFSET, EMPTYNODE, NGND, NPWR},
+    consts::{EMPTYNODE, NODE_GND, NODE_PWR},
 };
 use fnv::FnvHashMap;
 use std::{
@@ -11,6 +11,8 @@ use std::{
     fs::File,
     io::{BufRead, BufReader, Read},
 };
+
+pub const CPU_OFFSET: u16 = 13000;
 
 pub struct TransistorDefinition {
     name: String,
@@ -233,7 +235,7 @@ pub fn setup_nodes(segdefs: &[Vec<u16>]) -> Vec<Node> {
             nodes[w_idx].area = 0;
         }
 
-        if w == NGND || w == NPWR {
+        if w == NODE_GND || w == NODE_PWR {
             continue;
         }
 
@@ -278,23 +280,23 @@ pub fn setup_transistors(
         let name = trans_def.name;
         let gate = trans_def.gate;
 
-        if c1 == NGND {
+        if c1 == NODE_GND {
             c1 = c2;
-            c2 = NGND;
+            c2 = NODE_GND;
         }
 
-        if c1 == NPWR {
+        if c1 == NODE_PWR {
             c1 = c2;
-            c2 = NPWR;
+            c2 = NODE_PWR;
         }
 
         nodes[gate as usize].gates.push(i as u16);
-        if c1 != NPWR && c1 != NGND {
+        if c1 != NODE_PWR && c1 != NODE_GND {
             nodes_c1_c2[c1 as usize][node_counts[c1 as usize] as usize] = i as u16;
             node_counts[c1 as usize] += 1;
         }
 
-        if c2 != NPWR && c2 != NGND {
+        if c2 != NODE_PWR && c2 != NODE_GND {
             nodes_c1_c2[c2 as usize][node_counts[c2 as usize] as usize] = i as u16;
             node_counts[c2 as usize] += 1;
         }

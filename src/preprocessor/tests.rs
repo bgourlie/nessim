@@ -1,5 +1,5 @@
 use super::*;
-use crate::consts::NUM_NODES;
+use crate::consts::*;
 use std::fs::File;
 
 fn string_from_zip(file: &str) -> String {
@@ -223,10 +223,72 @@ fn transistor_index_by_name_reference_test() {
 }
 
 #[test]
-fn node_names_length_constant_test() {
+fn node_constant_tests() {
     // Ensure that the NUM_NODES constant always reflects the number of processed nodes.
     let conversion_table = id_conversion_table();
     let seg_defs = load_segment_definitions(&conversion_table);
     let nodes = setup_nodes(&seg_defs);
+    let node_number_by_name_map = load_node_number_by_name_map(&conversion_table);
+
     assert_eq!(nodes.len(), NUM_NODES);
+    assert_eq!(
+        node_number_by_name_map["clk0"], NODE_CLK0,
+        "Wrong CLK0 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["res"], NODE_RESET,
+        "Wrong RESET constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["io_ce"], NODE_IO_CE,
+        "Wrong IO_CE constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["int"], NODE_INT,
+        "Wrong INT constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["ale"], NODE_ALE,
+        "Wrong ALE constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["rd"], NODE_RD,
+        "Wrong RD constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["wr"], NODE_WR,
+        "Wrong WR constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["cpu_so"], NODE_CPU_SO,
+        "Wrong CPU_SO constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["cpu_irq"], NODE_CPU_IRQ,
+        "Wrong CPU_IRQ constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["cpu_nmi"], NODE_CPU_NMI,
+        "Wrong CPU_NMI constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["cpu_clk0"], NODE_CPU_CLK0,
+        "Wrong CPU_CLK0 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["cpu_ab13"], NODE_CPU_AB13,
+        "Wrong CPU_AB13 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["cpu_ab14"], NODE_CPU_AB14,
+        "Wrong CPU_AB14 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["cpu_ab15"], NODE_CPU_AB15,
+        "Wrong CPU_AB15 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["cpu_rw"], NODE_CPU_RW,
+        "Wrong CPU_RW constant value"
+    );
 }

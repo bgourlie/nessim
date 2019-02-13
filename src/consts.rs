@@ -3,9 +3,24 @@ pub const PALETTE_RAM_SIZE: usize = 0x20;
 pub const NUM_NODES: usize = 33001;
 pub const NUM_TRANSISTORS: usize = 27703;
 pub const EMPTYNODE: u16 = 65535;
-pub const CPU_OFFSET: u16 = 13000;
-pub const NGND: u16 = 2;
-pub const NPWR: u16 = 1;
+pub const NODE_GND: u16 = 2;
+pub const NODE_PWR: u16 = 1;
+pub const NODE_CLK0: u16 = 772;
+pub const NODE_RESET: u16 = 1934;
+pub const NODE_IO_CE: u16 = 5;
+pub const NODE_INT: u16 = 1031;
+pub const NODE_ALE: u16 = 1611;
+pub const NODE_RD: u16 = 2428;
+pub const NODE_WR: u16 = 2087;
+pub const NODE_CPU_SO: u16 = 24246;
+pub const NODE_CPU_IRQ: u16 = 23488;
+pub const NODE_CPU_NMI: u16 = 1031;
+pub const NODE_CPU_CLK0: u16 = 24235;
+pub const NODE_CPU_AB13: u16 = 25083;
+pub const NODE_CPU_AB14: u16 = 25085;
+pub const NODE_CPU_AB15: u16 = 25086;
+pub const NODE_CPU_RW: u16 = 1224;
+
 pub const NUMBERS: [&str; 32] = [
     "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
     "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",

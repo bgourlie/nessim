@@ -7,9 +7,7 @@ mod tests;
 
 use crate::{
     components::{Node, Transistor},
-    consts::{
-        EMPTYNODE, NGND, NPWR, NUMBERS, NUM_NODES, PALETTE_ARGB, PALETTE_RAM_SIZE, SPRITE_RAM_SIZE,
-    },
+    consts::*,
 };
 use fnv::FnvHashMap;
 use std::{
@@ -223,7 +221,7 @@ impl SimulationState {
     fn all_nodes(&self) -> Vec<u16> {
         let mut nodes = Vec::new();
         for node in self.nodes.iter() {
-            if node.num != NPWR && node.num != NGND && node.num != EMPTYNODE {
+            if node.num != NODE_PWR && node.num != NODE_GND && node.num != EMPTYNODE {
                 nodes.push(node.num);
             }
         }
@@ -234,15 +232,15 @@ impl SimulationState {
         self.prev_hpos = -1;
 
         if soft_reset {
-            self.set_low("res");
+            self.set_low(NODE_RESET);
             for _ in 0..=(12 * 8 * 2) {
-                if self.is_node_high(self.node_number_by_name["clk0"]) {
-                    self.set_low("clk0");
+                if self.is_node_high(NODE_CLK0) {
+                    self.set_low(NODE_CLK0);
                 } else {
-                    self.set_high("clk0");
+                    self.set_high(NODE_CLK0);
                 }
             }
-            self.set_high("res");
+            self.set_high(NODE_RESET);
         } else {
             self.ppu_framebuffer.iter_mut().for_each(|b| *b = 0);
             self.cpu_ram.iter_mut().for_each(|b| *b = 0);
@@ -257,37 +255,37 @@ impl SimulationState {
                 node.floating.set(true);
             }
 
-            self.nodes[NGND as usize].state.set(false);
-            self.nodes[NGND as usize].floating.set(false);
-            self.nodes[NPWR as usize].state.set(true);
-            self.nodes[NPWR as usize].floating.set(false);
+            self.nodes[NODE_GND as usize].state.set(false);
+            self.nodes[NODE_GND as usize].floating.set(false);
+            self.nodes[NODE_PWR as usize].state.set(true);
+            self.nodes[NODE_PWR as usize].floating.set(false);
 
             for transistor in self.transistors.iter() {
-                transistor.on.set(transistor.gate == NPWR);
+                transistor.on.set(transistor.gate == NODE_PWR);
             }
 
-            self.set_low("res");
-            self.set_low("clk0");
-            self.set_high("io_ce");
-            self.set_high("int");
+            self.set_low(NODE_RESET);
+            self.set_low(NODE_CLK0);
+            self.set_high(NODE_IO_CE);
+            self.set_high(NODE_INT);
 
             for _ in 0..6 {
-                self.set_high("clk0");
-                self.set_low("clk0");
+                self.set_high(NODE_CLK0);
+                self.set_low(NODE_CLK0);
             }
 
-            self.set_low("cpu_so");
-            self.set_high("cpu_irq");
-            self.set_high("cpu_nmi");
+            self.set_low(NODE_CPU_SO);
+            self.set_high(NODE_CPU_IRQ);
+            self.set_high(NODE_CPU_NMI);
 
             self.recalc_node_list(&self.all_nodes());
 
             for _ in 0..(12 * 8) {
-                self.set_high("clk0");
-                self.set_low("clk0");
+                self.set_high(NODE_CLK0);
+                self.set_low(NODE_CLK0);
             }
 
-            self.set_high("res");
+            self.set_high(NODE_RESET);
         }
 
         self.cycle = 0;
@@ -298,33 +296,33 @@ impl SimulationState {
     }
 
     pub fn half_step(&mut self) {
-        let cpu_clk0 = self.is_node_high(self.node_number_by_name["cpu_clk0"]);
-        let clk = self.is_node_high(self.node_number_by_name["clk0"]);
+        let cpu_clk0 = self.is_node_high(NODE_CPU_CLK0);
+        let clk = self.is_node_high(NODE_CLK0);
 
         if clk {
-            self.set_low("clk0");
+            self.set_low(NODE_CLK0);
         } else {
-            self.set_high("clk0");
+            self.set_high(NODE_CLK0);
         }
 
         if self.step_cycle_count > 0 {
             self.step_cycle_count -= 1;
             if self.step_cycle_count == 0 {
-                self.set_high("io_ce");
+                self.set_high(NODE_IO_CE);
             }
-        } else if self.is_node_high(self.node_number_by_name["cpu_ab13"])
-            && !self.is_node_high(self.node_number_by_name["cpu_ab14"])
-            && !self.is_node_high(self.node_number_by_name["cpu_ab15"])
-            && self.is_node_high(self.node_number_by_name["cpu_clk0"])
+        } else if self.is_node_high(NODE_CPU_AB13)
+            && !self.is_node_high(NODE_CPU_AB14)
+            && !self.is_node_high(NODE_CPU_AB15)
+            && self.is_node_high(NODE_CPU_CLK0)
         {
             // Simulate the 74139's logic
-            self.set_low("io_ce");
+            self.set_low(NODE_IO_CE);
             self.step_cycle_count = 11;
         }
 
         self.handle_chr_bus();
 
-        if cpu_clk0 != self.is_node_high(self.node_number_by_name["cpu_clk0"]) {
+        if cpu_clk0 != self.is_node_high(NODE_CPU_CLK0) {
             if cpu_clk0 {
                 self.handle_cpu_bus_read();
             } else {
@@ -354,7 +352,7 @@ impl SimulationState {
     }
 
     fn handle_cpu_bus_read(&mut self) {
-        if self.is_node_high(self.node_number_by_name["cpu_rw"]) {
+        if self.is_node_high(NODE_CPU_RW) {
             let a = self.read_cpu_address_bus();
             let (d, open_bus) = self.cpu_read(a);
 
@@ -367,7 +365,7 @@ impl SimulationState {
     }
 
     fn handle_cpu_bus_write(&mut self) {
-        if !self.is_node_high(self.node_number_by_name["cpu_rw"]) {
+        if !self.is_node_high(NODE_CPU_RW) {
             let a = self.read_cpu_address_bus();
             let d = self.read_cpu_data_bus();
             self.cpu_write(a, d);
@@ -413,7 +411,7 @@ impl SimulationState {
     }
 
     fn recalc_node(&mut self, node_number: u16) -> Vec<u16> {
-        if node_number == NGND || node_number == NPWR {
+        if node_number == NODE_GND || node_number == NODE_PWR {
             Vec::new()
         } else {
             self.get_node_group(node_number);
@@ -455,7 +453,7 @@ impl SimulationState {
     }
 
     fn add_recalc_node(&self, node_number: u16, recalc_node_list: &mut Vec<u16>) {
-        if node_number == NGND || node_number == NPWR {
+        if node_number == NODE_GND || node_number == NODE_PWR {
             return;
         }
 
@@ -465,15 +463,13 @@ impl SimulationState {
         }
     }
 
-    fn set_high(&mut self, node_name: &str) {
-        let node_number = self.node_number_by_name[node_name];
+    fn set_high(&mut self, node_number: u16) {
         self.nodes[node_number as usize].pullup.set(true);
         self.nodes[node_number as usize].pulldown.set(false);
         self.recalc_node_list(&[node_number])
     }
 
-    fn set_low(&mut self, node_name: &str) {
-        let node_number = self.node_number_by_name[node_name];
+    fn set_low(&mut self, node_number: u16) {
         self.nodes[node_number as usize].pullup.set(false);
         self.nodes[node_number as usize].pulldown.set(true);
         self.recalc_node_list(&[node_number])
@@ -533,9 +529,9 @@ impl SimulationState {
     }
 
     fn handle_chr_bus(&mut self) {
-        let ale = self.is_node_high(self.node_number_by_name["ale"]);
-        let rd = self.is_node_high(self.node_number_by_name["rd"]);
-        let wr = self.is_node_high(self.node_number_by_name["wr"]);
+        let ale = self.is_node_high(NODE_ALE);
+        let rd = self.is_node_high(NODE_RD);
+        let wr = self.is_node_high(NODE_WR);
 
         // rising edge of ALE
         if self.prev_ppu_ale && ale {
@@ -565,9 +561,7 @@ impl SimulationState {
     }
 
     fn read_ppu_data_bus(&mut self) -> u8 {
-        if !self.is_node_high(self.node_number_by_name["rd"])
-            || !self.is_node_high(self.node_number_by_name["wr"])
-        {
+        if !self.is_node_high(NODE_RD) || !self.is_node_high(NODE_WR) {
             self.last_data = self.read_bits("db", 8) as u8;
         }
         self.last_data
@@ -677,7 +671,7 @@ impl SimulationState {
     }
 
     fn read_ppu_address_bus(&mut self) -> u16 {
-        if self.is_node_high(self.node_number_by_name["ale"]) {
+        if self.is_node_high(NODE_ALE) {
             self.last_address = self.read_bits("ab", 14);
         }
 
@@ -736,12 +730,12 @@ impl SimulationState {
     }
 
     fn add_node_to_group(&mut self, node_number: u16) {
-        if node_number == NGND {
+        if node_number == NODE_GND {
             self.has_ground = true;
             return;
         }
 
-        if node_number == NPWR {
+        if node_number == NODE_PWR {
             self.has_power = true;
             return;
         }
