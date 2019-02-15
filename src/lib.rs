@@ -396,7 +396,26 @@ impl SimulationState {
 
         let mut next_list = Vec::new();
         for node_number in recalc_list {
-            next_list.extend_from_slice(&self.recalc_node(*node_number));
+            let node_number = *node_number;
+            if node_number == NODE_GND || node_number == NODE_PWR {
+                continue;
+            } else {
+                self.get_node_group(node_number);
+                let new_state = self.get_node_value();
+                for node_number in &self.group {
+                    let node_number = *node_number as usize;
+                    if self.nodes[node_number].state.get() != new_state {
+                        self.nodes[node_number].state.set(new_state);
+                        for i in &self.nodes[node_number].gates {
+                            if self.nodes[node_number].state.get() {
+                                self.turn_transistor_on(*i, &mut next_list);
+                            } else {
+                                self.turn_transistor_off(*i, &mut next_list);
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         if next_list.is_empty() {
@@ -408,31 +427,6 @@ impl SimulationState {
         }
 
         self.recalc_node_list_help(&next_list, recurse_depth + 1);
-    }
-
-    fn recalc_node(&mut self, node_number: u16) -> Vec<u16> {
-        if node_number == NODE_GND || node_number == NODE_PWR {
-            Vec::new()
-        } else {
-            self.get_node_group(node_number);
-            let new_state = self.get_node_value();
-            let mut recalc_node_list = Vec::new();
-
-            for node_number in &self.group {
-                let node_number = *node_number as usize;
-                if self.nodes[node_number].state.get() != new_state {
-                    self.nodes[node_number].state.set(new_state);
-                    for i in &self.nodes[node_number].gates {
-                        if self.nodes[node_number].state.get() {
-                            self.turn_transistor_on(*i, &mut recalc_node_list);
-                        } else {
-                            self.turn_transistor_off(*i, &mut recalc_node_list);
-                        }
-                    }
-                }
-            }
-            recalc_node_list
-        }
     }
 
     fn turn_transistor_on(&self, i: u16, recalc_node_list: &mut Vec<u16>) {
