@@ -44,7 +44,6 @@ enum MirroringType {
 }
 
 pub struct SimulationState {
-    cycle: u16,
     nodes: Vec<Node>,
     node_number_by_name: FnvHashMap<String, u16>,
     has_ground: bool,
@@ -91,7 +90,6 @@ impl SimulationState {
         let node_number_by_name = load_node_number_by_name_map(&conversion_table);
 
         SimulationState {
-            cycle: 0,
             nodes,
             node_number_by_name,
             node_counts,
@@ -288,7 +286,6 @@ impl SimulationState {
             self.set_high(NODE_RESET);
         }
 
-        self.cycle = 0;
         self.chr_address = 0;
         self.prev_ppu_read = true;
         self.prev_ppu_write = true;
@@ -347,8 +344,6 @@ impl SimulationState {
                 self.prev_hpos = hpos;
             }
         }
-
-        self.cycle += 1;
     }
 
     fn handle_cpu_bus_read(&mut self) {
@@ -470,52 +465,48 @@ impl SimulationState {
     }
 
     fn read_bits(&mut self, name: &str, mut n: u8) -> u16 {
-        if name == "cycle" {
-            self.cycle >> 1
-        } else {
-            let mut res = 0_u16;
-            if n == 0 {
-                let last_char = name.chars().last().unwrap();
-                if last_char >= '0' && last_char <= '9' {
-                    return u16::from(self.read_bit(self.node_number_by_name[name]));
-                } else {
-                    if let Some(bit_count) = self.bit_count_cache.get(name) {
-                        n = *bit_count;
-                    } else {
-                        self.node_number_cache.insert(name.to_owned(), Vec::new());
-                        while self
-                            .node_number_by_name
-                            .contains_key(format!("{}{}", name, NUMBERS[n as usize]).as_str())
-                        {
-                            self.node_number_cache.get_mut(name).unwrap().push(
-                                self.node_number_by_name
-                                    [format!("{}{}", name, NUMBERS[n as usize]).as_str()],
-                            );
-                            n += 1;
-                        }
-
-                        self.bit_count_cache.insert(name.to_owned(), n);
-                        if n == 0 && self.node_number_by_name.contains_key(name) {
-                            self.bit_count_cache.insert(name.to_owned(), 1);
-                        }
-                    }
-
-                    if n == 1 {
-                        return u16::from(self.read_bit(self.node_number_by_name[name]));
-                    }
-                }
-                for (i, nn) in self.node_number_cache[name].iter().enumerate() {
-                    res += if self.is_node_high(*nn) { 1 } else { 0 } << i;
-                }
+        let mut res = 0_u16;
+        if n == 0 {
+            let last_char = name.chars().last().unwrap();
+            if last_char >= '0' && last_char <= '9' {
+                return u16::from(self.read_bit(self.node_number_by_name[name]));
             } else {
-                for i in 0..n {
-                    let nn = self.node_number_by_name
-                        [format!("{}{}", name, NUMBERS[i as usize]).as_str()];
-                    res += (if self.is_node_high(nn) { 1 } else { 0 }) << i;
+                if let Some(bit_count) = self.bit_count_cache.get(name) {
+                    n = *bit_count;
+                } else {
+                    self.node_number_cache.insert(name.to_owned(), Vec::new());
+                    while self
+                        .node_number_by_name
+                        .contains_key(format!("{}{}", name, NUMBERS[n as usize]).as_str())
+                    {
+                        self.node_number_cache.get_mut(name).unwrap().push(
+                            self.node_number_by_name
+                                [format!("{}{}", name, NUMBERS[n as usize]).as_str()],
+                        );
+                        n += 1;
+                    }
+
+                    self.bit_count_cache.insert(name.to_owned(), n);
+                    if n == 0 && self.node_number_by_name.contains_key(name) {
+                        self.bit_count_cache.insert(name.to_owned(), 1);
+                    }
+                }
+
+                if n == 1 {
+                    return u16::from(self.read_bit(self.node_number_by_name[name]));
                 }
             }
-            res
+            for (i, nn) in self.node_number_cache[name].iter().enumerate() {
+                res += if self.is_node_high(*nn) { 1 } else { 0 } << i;
+            }
+        } else {
+            for i in 0..n {
+                let nn =
+                    self.node_number_by_name[format!("{}{}", name, NUMBERS[i as usize]).as_str()];
+                res += (if self.is_node_high(nn) { 1 } else { 0 }) << i;
+            }
         }
+        res
     }
 
     fn read_bit(&self, node_number: u16) -> u8 {
