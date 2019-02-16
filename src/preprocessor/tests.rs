@@ -487,4 +487,8 @@ fn node_constant_tests() {
         node_number_by_name_map["pal_d5_out"], NODE_PAL_D5_OUT,
         "Wrong PAL_D5_OUT constant value"
     );
+    assert_eq!(
+        node_number_by_name_map["pclk1"], NODE_PCLK1,
+        "Wrong PCLK1 constant value"
+    );
 }

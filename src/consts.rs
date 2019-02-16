@@ -69,6 +69,7 @@ pub const NODE_PAL_D2_OUT: u16 = 6566;
 pub const NODE_PAL_D3_OUT: u16 = 6567;
 pub const NODE_PAL_D4_OUT: u16 = 6564;
 pub const NODE_PAL_D5_OUT: u16 = 6568;
+pub const NODE_PCLK1: u16 = 58;
 
 pub const NUMBERS: [&str; 32] = [
     "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",

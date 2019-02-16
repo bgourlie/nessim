@@ -331,7 +331,7 @@ impl SimulationState {
             }
         }
 
-        if self.read_bits("pclk1", 0) > 0 {
+        if self.read_bit(NODE_PCLK1) > 0 {
             let hpos = i32::from(self.read_bits("hpos", 0)) - 2;
             if hpos != self.prev_hpos {
                 let vpos = self.read_bits("vpos", 0);
