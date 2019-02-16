@@ -372,12 +372,51 @@ impl SimulationState {
     }
 
     fn read_cpu_address_bus(&mut self) -> u16 {
-        self.read_bits("cpu_ab", 16)
+        let mut res = 0_u16;
+        for (i, nn) in [
+            NODE_CPU_AB0,
+            NODE_CPU_AB1,
+            NODE_CPU_AB2,
+            NODE_CPU_AB3,
+            NODE_CPU_AB4,
+            NODE_CPU_AB5,
+            NODE_CPU_AB6,
+            NODE_CPU_AB7,
+            NODE_CPU_AB8,
+            NODE_CPU_AB9,
+            NODE_CPU_AB10,
+            NODE_CPU_AB11,
+            NODE_CPU_AB12,
+            NODE_CPU_AB13,
+            NODE_CPU_AB14,
+            NODE_CPU_AB15,
+        ]
+        .iter()
+        .enumerate()
+        {
+            res += (self.is_node_high(*nn) as u16) << i;
+        }
+        res
     }
 
     fn read_cpu_data_bus(&mut self) -> u8 {
-        self.last_cpu_db_value = self.read_bits("cpu_db", 8) as u8;
-        self.last_cpu_db_value
+        let mut res = 0_u8;
+        for (i, nn) in [
+            NODE_CPU_DB0,
+            NODE_CPU_DB1,
+            NODE_CPU_DB2,
+            NODE_CPU_DB3,
+            NODE_CPU_DB4,
+            NODE_CPU_DB5,
+            NODE_CPU_DB6,
+            NODE_CPU_DB7,
+        ]
+        .iter()
+        .enumerate()
+        {
+            res += (self.is_node_high(*nn) as u8) << i;
+        }
+        res
     }
 
     fn is_node_high(&self, node_number: u16) -> bool {
