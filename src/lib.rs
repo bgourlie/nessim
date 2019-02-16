@@ -6,10 +6,10 @@ mod recalc_swap_list;
 #[cfg(test)]
 mod tests;
 
-use crate::recalc_swap_list::RecalcSwapList;
 use crate::{
     components::{Node, Transistor},
     consts::*,
+    recalc_swap_list::RecalcSwapList,
 };
 use std::{
     cell::Cell,

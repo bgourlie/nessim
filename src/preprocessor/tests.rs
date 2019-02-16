@@ -124,7 +124,7 @@ fn transistors_reference_test() {
     let trans_defs = load_transistor_definitions(&conversion_table);
     let mut nodes = setup_nodes(&seg_defs);
 
-    let (transistors, _, _, _) = setup_transistors(&mut nodes, trans_defs.clone());
+    let (transistors, ..) = setup_transistors(&mut nodes, trans_defs.clone());
 
     let processed_data = trans_defs
         .iter()
@@ -167,7 +167,7 @@ fn node_counts_reference_test() {
     let trans_defs = load_transistor_definitions(&conversion_table);
     let mut nodes = setup_nodes(&seg_defs);
 
-    let (_, node_counts, _, _) = setup_transistors(&mut nodes, trans_defs);
+    let (_, node_counts, ..) = setup_transistors(&mut nodes, trans_defs);
 
     let processed_data = node_counts
         .iter()
