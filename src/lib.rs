@@ -46,6 +46,7 @@ enum MirroringType {
 
 pub struct SimulationState {
     all_recalc_nodes: Vec<u16>,
+    transistors_initial_power_state: Vec<bool>,
     nodes: Vec<Node>,
     has_ground: bool,
     has_power: bool,
@@ -85,6 +86,10 @@ impl SimulationState {
         let trans_defs = load_transistor_definitions(&conversion_table);
         let mut nodes = setup_nodes(&seg_defs);
         let (palette_nodes, sprite_nodes) = load_ppu_nodes();
+        let transistors_initial_power_state = trans_defs
+            .iter()
+            .map(|def| def.gate == NODE_PWR)
+            .collect::<Vec<bool>>();
         let (transistors, node_counts, nodes_c1_c2, _) = setup_transistors(&mut nodes, trans_defs);
         let all_recalc_nodes = nodes
             .iter()
@@ -94,6 +99,7 @@ impl SimulationState {
 
         SimulationState {
             all_recalc_nodes,
+            transistors_initial_power_state,
             nodes: nodes.into_iter().map(|def| Node::new(def)).collect(),
             node_counts,
             has_ground: false,
@@ -250,8 +256,8 @@ impl SimulationState {
             self.nodes[NODE_PWR as usize].state.set(true);
             self.nodes[NODE_PWR as usize].floating.set(false);
 
-            for transistor in self.transistors.iter() {
-                transistor.on.set(transistor.gate == NODE_PWR);
+            for (i, on) in self.transistors_initial_power_state.iter().enumerate() {
+                self.transistors[i].on.set(*on);
             }
 
             self.set_low(NODE_RESET);

@@ -2,7 +2,7 @@
 mod tests;
 
 use crate::{
-    components::{NodeDefinition, Transistor},
+    components::{NodeDefinition, Transistor, TransistorDefinition},
     consts::{EMPTYNODE, NODE_GND, NODE_PWR},
 };
 use fnv::FnvHashMap;
@@ -13,14 +13,6 @@ use std::{
 };
 
 pub const CPU_OFFSET: u16 = 13000;
-
-#[derive(Clone)]
-pub struct TransistorDefinition {
-    name: String,
-    gate: u16,
-    c1: u16,
-    c2: u16,
-}
 
 pub fn id_conversion_table() -> FnvHashMap<u16, u16> {
     let mut map = FnvHashMap::default();
@@ -305,7 +297,6 @@ pub fn setup_transistors(
         transistors.push(Transistor {
             c1,
             c2,
-            gate,
             on: Cell::new(false),
         });
         transistor_index_by_name.insert(name, i as u16);

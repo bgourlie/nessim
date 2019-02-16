@@ -47,9 +47,16 @@ impl Node {
     }
 }
 
+#[derive(Clone)]
+pub struct TransistorDefinition {
+    pub name: String,
+    pub gate: u16,
+    pub c1: u16,
+    pub c2: u16,
+}
+
 pub struct Transistor {
     pub on: Cell<bool>,
     pub c1: u16,
     pub c2: u16,
-    pub gate: u16,
 }

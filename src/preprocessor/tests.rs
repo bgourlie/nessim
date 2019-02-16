@@ -135,7 +135,7 @@ fn transistors_reference_test() {
                 trans_def.name,
                 trans.c1,
                 trans.c2,
-                trans.gate,
+                trans_def.gate,
                 if trans.on.get() { 1 } else { 0 }
             )
         })
