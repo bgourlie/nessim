@@ -1,7 +1,6 @@
 pub const SPRITE_RAM_SIZE: usize = 0x120;
 pub const PALETTE_RAM_SIZE: usize = 0x20;
 pub const NUM_NODES: usize = 33001;
-pub const NUM_TRANSISTORS: usize = 27703;
 pub const EMPTYNODE: u16 = 65535;
 pub const NODE_GND: u16 = 2;
 pub const NODE_PWR: u16 = 1;
@@ -70,11 +69,24 @@ pub const NODE_PAL_D3_OUT: u16 = 6567;
 pub const NODE_PAL_D4_OUT: u16 = 6564;
 pub const NODE_PAL_D5_OUT: u16 = 6568;
 pub const NODE_PCLK1: u16 = 58;
-
-pub const NUMBERS: [&str; 32] = [
-    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-    "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
-];
+pub const NODE_HPOS0: u16 = 209;
+pub const NODE_HPOS1: u16 = 260;
+pub const NODE_HPOS2: u16 = 310;
+pub const NODE_HPOS3: u16 = 376;
+pub const NODE_HPOS4: u16 = 428;
+pub const NODE_HPOS5: u16 = 495;
+pub const NODE_HPOS6: u16 = 544;
+pub const NODE_HPOS7: u16 = 584;
+pub const NODE_HPOS8: u16 = 631;
+pub const NODE_VPOS0: u16 = 210;
+pub const NODE_VPOS1: u16 = 259;
+pub const NODE_VPOS2: u16 = 311;
+pub const NODE_VPOS3: u16 = 377;
+pub const NODE_VPOS4: u16 = 429;
+pub const NODE_VPOS5: u16 = 496;
+pub const NODE_VPOS6: u16 = 543;
+pub const NODE_VPOS7: u16 = 588;
+pub const NODE_VPOS8: u16 = 632;
 
 #[allow(clippy::unreadable_literal)]
 pub const PALETTE_ARGB: [u32; 64] = [

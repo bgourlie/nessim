@@ -491,4 +491,76 @@ fn node_constant_tests() {
         node_number_by_name_map["pclk1"], NODE_PCLK1,
         "Wrong PCLK1 constant value"
     );
+    assert_eq!(
+        node_number_by_name_map["hpos0"], NODE_HPOS0,
+        "Wrong HPOS0 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["hpos1"], NODE_HPOS1,
+        "Wrong HPOS1 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["hpos2"], NODE_HPOS2,
+        "Wrong HPOS2 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["hpos3"], NODE_HPOS3,
+        "Wrong HPOS3 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["hpos4"], NODE_HPOS4,
+        "Wrong HPOS4 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["hpos5"], NODE_HPOS5,
+        "Wrong HPOS5 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["hpos6"], NODE_HPOS6,
+        "Wrong HPOS6 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["hpos7"], NODE_HPOS7,
+        "Wrong HPOS7 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["hpos8"], NODE_HPOS8,
+        "Wrong HPOS8 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["vpos0"], NODE_VPOS0,
+        "Wrong VPOS0 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["vpos1"], NODE_VPOS1,
+        "Wrong VPOS1 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["vpos2"], NODE_VPOS2,
+        "Wrong VPOS2 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["vpos3"], NODE_VPOS3,
+        "Wrong VPOS3 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["vpos4"], NODE_VPOS4,
+        "Wrong VPOS4 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["vpos5"], NODE_VPOS5,
+        "Wrong VPOS5 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["vpos6"], NODE_VPOS6,
+        "Wrong VPOS6 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["vpos7"], NODE_VPOS7,
+        "Wrong VPOS7 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["vpos8"], NODE_VPOS8,
+        "Wrong VPOS8 constant value"
+    );
 }

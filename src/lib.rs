@@ -60,8 +60,6 @@ pub struct SimulationState {
     prev_ppu_write: bool,
     prev_ppu_read: bool,
     chr_address: u16,
-    node_number_cache: FnvHashMap<String, Vec<u16>>,
-    bit_count_cache: FnvHashMap<String, u8>,
     last_address: u16,
     mirroring_type: MirroringType,
     chr_ram: Box<[u8; 0x2000]>,
@@ -107,8 +105,6 @@ impl SimulationState {
             prev_ppu_read: true,
             prev_ppu_write: true,
             chr_address: 0,
-            node_number_cache: FnvHashMap::default(),
-            bit_count_cache: FnvHashMap::default(),
             last_address: 0,
             mirroring_type: MirroringType::Horizontal,
             chr_ram: Box::new([0; 0x2000]),
@@ -332,9 +328,9 @@ impl SimulationState {
         }
 
         if self.read_bit(NODE_PCLK1) > 0 {
-            let hpos = i32::from(self.read_bits("hpos", 0)) - 2;
+            let hpos = i32::from(self.read_hpos()) - 2;
             if hpos != self.prev_hpos {
-                let vpos = self.read_bits("vpos", 0);
+                let vpos = self.read_vpos();
                 if hpos >= 0 && hpos < 256 && vpos < 240 {
                     let palette_entry = self.read_bit(NODE_PAL_D0_OUT)
                         | (self.read_bit(NODE_PAL_D1_OUT) << 1)
@@ -517,6 +513,36 @@ impl SimulationState {
         res
     }
 
+    fn read_hpos(&self) -> u16 {
+        let mut res = 0_u16;
+        for (i, node_number) in [
+            NODE_HPOS0, NODE_HPOS1, NODE_HPOS2, NODE_HPOS3, NODE_HPOS4, NODE_HPOS5, NODE_HPOS6,
+            NODE_HPOS7, NODE_HPOS8,
+        ]
+        .iter()
+        .enumerate()
+        {
+            let node_number = *node_number;
+            res += (self.is_node_high(node_number) as u16) << i;
+        }
+        res
+    }
+
+    fn read_vpos(&self) -> u16 {
+        let mut res = 0_u16;
+        for (i, node_number) in [
+            NODE_VPOS0, NODE_VPOS1, NODE_VPOS2, NODE_VPOS3, NODE_VPOS4, NODE_VPOS5, NODE_VPOS6,
+            NODE_VPOS7, NODE_VPOS8,
+        ]
+        .iter()
+        .enumerate()
+        {
+            let node_number = *node_number;
+            res += (self.is_node_high(node_number) as u16) << i;
+        }
+        res
+    }
+
     fn read_ab(&self) -> u16 {
         let mut res = 0_u16;
         for (i, node_number) in [
@@ -528,51 +554,6 @@ impl SimulationState {
         {
             let node_number = *node_number;
             res += (self.is_node_high(node_number) as u16) << i;
-        }
-        res
-    }
-
-    fn read_bits(&mut self, name: &str, mut n: u8) -> u16 {
-        let mut res = 0_u16;
-        if n == 0 {
-            let last_char = name.chars().last().unwrap();
-            if last_char >= '0' && last_char <= '9' {
-                return u16::from(self.read_bit(self.node_number_by_name[name]));
-            } else {
-                if let Some(bit_count) = self.bit_count_cache.get(name) {
-                    n = *bit_count;
-                } else {
-                    self.node_number_cache.insert(name.to_owned(), Vec::new());
-                    while self
-                        .node_number_by_name
-                        .contains_key(format!("{}{}", name, NUMBERS[n as usize]).as_str())
-                    {
-                        self.node_number_cache.get_mut(name).unwrap().push(
-                            self.node_number_by_name
-                                [format!("{}{}", name, NUMBERS[n as usize]).as_str()],
-                        );
-                        n += 1;
-                    }
-
-                    self.bit_count_cache.insert(name.to_owned(), n);
-                    if n == 0 && self.node_number_by_name.contains_key(name) {
-                        self.bit_count_cache.insert(name.to_owned(), 1);
-                    }
-                }
-
-                if n == 1 {
-                    return u16::from(self.read_bit(self.node_number_by_name[name]));
-                }
-            }
-            for (i, nn) in self.node_number_cache[name].iter().enumerate() {
-                res += if self.is_node_high(*nn) { 1 } else { 0 } << i;
-            }
-        } else {
-            for i in 0..n {
-                let nn =
-                    self.node_number_by_name[format!("{}{}", name, NUMBERS[i as usize]).as_str()];
-                res += (if self.is_node_high(nn) { 1 } else { 0 }) << i;
-            }
         }
         res
     }

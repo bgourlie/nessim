@@ -1,6 +1,8 @@
-use crate::{consts::NUM_TRANSISTORS, MemoryType, SimulationState, NUM_NODES};
+use crate::{MemoryType, SimulationState, NUM_NODES};
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::io::Read;
+
+const NUM_TRANSISTORS: usize = 27703;
 
 #[test]
 fn reference_tests() {
