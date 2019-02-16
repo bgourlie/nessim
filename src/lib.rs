@@ -745,3 +745,9 @@ impl SimulationState {
         }
     }
 }
+
+impl Default for SimulationState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
