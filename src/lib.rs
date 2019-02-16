@@ -122,7 +122,7 @@ impl SimulationState {
             sprite_nodes,
             palette_nodes,
             swap_lists: [
-                Rc::new(RefCell::new(Vec::with_capacity(5120))),
+                Rc::new(RefCell::new(Vec::with_capacity(14330))),
                 Rc::new(RefCell::new(Vec::with_capacity(5120))),
             ],
             swap_list_indices: (0, 1),
