@@ -356,7 +356,7 @@ impl SimulationState {
             let (d, open_bus) = self.cpu_read(a);
 
             if open_bus {
-                self.float_byte("cpu_db");
+                self.float_cpu_db();
             } else {
                 self.write_byte("cpu_db", u16::from(d));
             }
@@ -569,7 +569,7 @@ impl SimulationState {
 
         // rising edge of /RD - flaot the data bus
         if !self.prev_ppu_read && rd {
-            self.float_byte("db");
+            self.float_db();
         }
 
         // rising edge of /WR - store data in RAM
@@ -591,15 +591,34 @@ impl SimulationState {
         self.last_data
     }
 
-    fn float_byte(&mut self, name: &str) {
+    fn float_byte(&mut self, nodes: [u16; 8]) {
         let mut recalc_nodes = [0_u16; 8];
-        for i in 0..8 {
-            let node_number = self.node_number_by_name[format!("{}{}", name, i).as_str()];
+        for (i, node_number) in nodes.iter().enumerate() {
+            let node_number = *node_number;
             self.nodes[node_number as usize].pulldown.set(false);
             self.nodes[node_number as usize].pullup.set(false);
             recalc_nodes[i as usize] = node_number;
         }
         self.recalc_node_list(&recalc_nodes);
+    }
+
+    fn float_db(&mut self) {
+        self.float_byte([
+            NODE_DB0, NODE_DB1, NODE_DB2, NODE_DB3, NODE_DB4, NODE_DB5, NODE_DB6, NODE_DB7,
+        ])
+    }
+
+    fn float_cpu_db(&mut self) {
+        self.float_byte([
+            NODE_CPU_DB0,
+            NODE_CPU_DB1,
+            NODE_CPU_DB2,
+            NODE_CPU_DB3,
+            NODE_CPU_DB4,
+            NODE_CPU_DB5,
+            NODE_CPU_DB6,
+            NODE_CPU_DB7,
+        ])
     }
 
     /// Read byte at address in memory, returning the byte at that address and a boolean

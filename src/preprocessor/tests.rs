@@ -372,6 +372,38 @@ fn node_constant_tests() {
         "Wrong CPU_DB7 constant value"
     );
     assert_eq!(
+        node_number_by_name_map["db0"], NODE_DB0,
+        "Wrong DB0 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["db1"], NODE_DB1,
+        "Wrong DB1 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["db2"], NODE_DB2,
+        "Wrong DB2 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["db3"], NODE_DB3,
+        "Wrong DB3 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["db4"], NODE_DB4,
+        "Wrong DB4 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["db5"], NODE_DB5,
+        "Wrong DB5 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["db6"], NODE_DB6,
+        "Wrong DB6 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["db7"], NODE_DB7,
+        "Wrong DB7 constant value"
+    );
+    assert_eq!(
         node_number_by_name_map["cpu_rw"], NODE_CPU_RW,
         "Wrong CPU_RW constant value"
     );
