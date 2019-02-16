@@ -1,19 +1,20 @@
 mod components;
 mod consts;
 mod preprocessor;
+mod recalc_swap_list;
 
 #[cfg(test)]
 mod tests;
 
+use crate::recalc_swap_list::RecalcSwapList;
 use crate::{
     components::{Node, Transistor},
     consts::*,
 };
 use fnv::FnvHashMap;
 use std::{
-    cell::{Cell, RefCell},
+    cell::Cell,
     io::{Read, Seek},
-    rc::Rc,
 };
 
 #[allow(dead_code)]
@@ -73,8 +74,7 @@ pub struct SimulationState {
     ppu_framebuffer: Box<[u32; 256 * 240]>,
     sprite_nodes: Vec<Vec<(i32, i32)>>,
     palette_nodes: Vec<Vec<(i32, i32)>>,
-    swap_lists: [Rc<RefCell<Vec<u16>>>; 2],
-    swap_list_indices: (usize, usize),
+    recalc_swap_list: RecalcSwapList,
 }
 
 impl SimulationState {
@@ -121,11 +121,7 @@ impl SimulationState {
             ppu_framebuffer: Box::new([0; 256 * 240]),
             sprite_nodes,
             palette_nodes,
-            swap_lists: [
-                Rc::new(RefCell::new(Vec::with_capacity(14330))),
-                Rc::new(RefCell::new(Vec::with_capacity(5120))),
-            ],
-            swap_list_indices: (0, 1),
+            recalc_swap_list: RecalcSwapList::new(),
         }
     }
 
@@ -389,17 +385,12 @@ impl SimulationState {
     }
 
     fn recalc_node_list(&mut self, recalc_list: &[u16]) {
-        self.swap_lists[0].borrow_mut().clear();
-        self.swap_lists[0]
-            .borrow_mut()
-            .extend_from_slice(recalc_list);
-        self.swap_list_indices = (0, 1);
+        self.recalc_swap_list.init(recalc_list);
         for iter_count in 0..100 {
             if iter_count >= 99 {
                 panic!("iter count exceeded");
             }
-            let (cur_list, next_list) = self.swap_list_indices;
-            for node_number in self.swap_lists[cur_list].clone().borrow().iter() {
+            for node_number in self.recalc_swap_list.cur_list().borrow().iter() {
                 let node_number = *node_number;
                 if node_number == NODE_GND || node_number == NODE_PWR {
                     continue;
@@ -422,15 +413,14 @@ impl SimulationState {
                 }
             }
 
-            if self.swap_lists[next_list].borrow().is_empty() {
+            if self.recalc_swap_list.is_next_list_empty() {
                 return;
             }
 
-            for node_number in self.swap_lists[next_list].borrow().iter() {
+            for node_number in self.recalc_swap_list.next_list().iter() {
                 self.processed_nodes[*node_number as usize].set(false);
             }
-            self.swap_lists[cur_list].borrow_mut().clear();
-            self.swap_list_indices = (next_list, cur_list);
+            self.recalc_swap_list.swap();
         }
     }
 
@@ -457,8 +447,7 @@ impl SimulationState {
         }
 
         if !self.processed_nodes[node_number as usize].get() {
-            let (_, list_index) = self.swap_list_indices;
-            self.swap_lists[list_index].borrow_mut().push(node_number);
+            self.recalc_swap_list.push_next_list(node_number);
             self.processed_nodes[node_number as usize].set(true);
         }
     }
