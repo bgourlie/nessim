@@ -1,6 +1,4 @@
 use crate::consts::EMPTYNODE;
-use crate::consts::NODE_GND;
-use crate::consts::NODE_PWR;
 use std::cell::Cell;
 
 #[derive(Clone)]
@@ -54,5 +52,4 @@ pub struct Transistor {
     pub c1: u16,
     pub c2: u16,
     pub gate: u16,
-    pub name: String,
 }

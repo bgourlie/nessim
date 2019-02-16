@@ -14,6 +14,7 @@ use std::{
 
 pub const CPU_OFFSET: u16 = 13000;
 
+#[derive(Clone)]
 pub struct TransistorDefinition {
     name: String,
     gate: u16,
@@ -306,7 +307,6 @@ pub fn setup_transistors(
             c2,
             gate,
             on: Cell::new(false),
-            name: name.clone(),
         });
         transistor_index_by_name.insert(name, i as u16);
     }

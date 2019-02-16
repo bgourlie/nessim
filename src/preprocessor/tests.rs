@@ -124,14 +124,15 @@ fn transistors_reference_test() {
     let trans_defs = load_transistor_definitions(&conversion_table);
     let mut nodes = setup_nodes(&seg_defs);
 
-    let (transistors, _, _, _) = setup_transistors(&mut nodes, trans_defs);
+    let (transistors, _, _, _) = setup_transistors(&mut nodes, trans_defs.clone());
 
-    let processed_data = transistors
+    let processed_data = trans_defs
         .iter()
-        .map(|trans| {
+        .zip(transistors)
+        .map(|(trans_def, trans)| {
             format!(
                 "{},{},{},{},{}",
-                trans.name,
+                trans_def.name,
                 trans.c1,
                 trans.c2,
                 trans.gate,
