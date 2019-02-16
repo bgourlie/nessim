@@ -11,8 +11,9 @@ use crate::{
 };
 use fnv::FnvHashMap;
 use std::{
-    cell::Cell,
+    cell::{Cell, RefCell},
     io::{Read, Seek},
+    rc::Rc,
 };
 
 #[allow(dead_code)]
@@ -72,6 +73,8 @@ pub struct SimulationState {
     ppu_framebuffer: Box<[u32; 256 * 240]>,
     sprite_nodes: Vec<Vec<(i32, i32)>>,
     palette_nodes: Vec<Vec<(i32, i32)>>,
+    swap_lists: [Rc<RefCell<Vec<u16>>>; 2],
+    swap_list_indices: (usize, usize),
 }
 
 impl SimulationState {
@@ -118,6 +121,11 @@ impl SimulationState {
             ppu_framebuffer: Box::new([0; 256 * 240]),
             sprite_nodes,
             palette_nodes,
+            swap_lists: [
+                Rc::new(RefCell::new(Vec::with_capacity(5120))),
+                Rc::new(RefCell::new(Vec::with_capacity(5120))),
+            ],
+            swap_list_indices: (0, 1),
         }
     }
 
@@ -381,73 +389,76 @@ impl SimulationState {
     }
 
     fn recalc_node_list(&mut self, recalc_list: &[u16]) {
-        self.recalc_node_list_help(recalc_list, 0);
-    }
-
-    fn recalc_node_list_help(&mut self, recalc_list: &[u16], recurse_depth: usize) {
-        if recurse_depth >= 99 {
-            panic!("recurse depth exceeded");
-        }
-
-        let mut next_list = Vec::new();
-        for node_number in recalc_list {
-            let node_number = *node_number;
-            if node_number == NODE_GND || node_number == NODE_PWR {
-                continue;
-            } else {
-                self.get_node_group(node_number);
-                let new_state = self.get_node_value();
-                for node_number in &self.group {
-                    let node_number = *node_number as usize;
-                    if self.nodes[node_number].state.get() != new_state {
-                        self.nodes[node_number].state.set(new_state);
-                        for i in &self.nodes[node_number].gates {
-                            if self.nodes[node_number].state.get() {
-                                self.turn_transistor_on(*i, &mut next_list);
-                            } else {
-                                self.turn_transistor_off(*i, &mut next_list);
+        self.swap_lists[0].borrow_mut().clear();
+        self.swap_lists[0]
+            .borrow_mut()
+            .extend_from_slice(recalc_list);
+        self.swap_list_indices = (0, 1);
+        for iter_count in 0..100 {
+            if iter_count >= 99 {
+                panic!("iter count exceeded");
+            }
+            let (cur_list, next_list) = self.swap_list_indices;
+            for node_number in self.swap_lists[cur_list].clone().borrow().iter() {
+                let node_number = *node_number;
+                if node_number == NODE_GND || node_number == NODE_PWR {
+                    continue;
+                } else {
+                    self.get_node_group(node_number);
+                    let new_state = self.get_node_value();
+                    for node_number in &self.group {
+                        let node_number = *node_number as usize;
+                        if self.nodes[node_number].state.get() != new_state {
+                            self.nodes[node_number].state.set(new_state);
+                            for i in &self.nodes[node_number].gates {
+                                if self.nodes[node_number].state.get() {
+                                    self.turn_transistor_on(*i);
+                                } else {
+                                    self.turn_transistor_off(*i);
+                                }
                             }
                         }
                     }
                 }
             }
-        }
 
-        if next_list.is_empty() {
-            return;
-        }
+            if self.swap_lists[next_list].borrow().is_empty() {
+                return;
+            }
 
-        for node_number in &next_list {
-            self.processed_nodes[*node_number as usize].set(false);
+            for node_number in self.swap_lists[next_list].borrow().iter() {
+                self.processed_nodes[*node_number as usize].set(false);
+            }
+            self.swap_lists[cur_list].borrow_mut().clear();
+            self.swap_list_indices = (next_list, cur_list);
         }
-
-        self.recalc_node_list_help(&next_list, recurse_depth + 1);
     }
 
-    fn turn_transistor_on(&self, i: u16, recalc_node_list: &mut Vec<u16>) {
+    fn turn_transistor_on(&self, i: u16) {
         let i = i as usize;
         if !self.transistors[i].on.get() {
             self.transistors[i].on.set(true);
-            self.add_recalc_node(self.transistors[i].c1, recalc_node_list);
+            self.add_recalc_node(self.transistors[i].c1);
         }
     }
 
-    fn turn_transistor_off(&self, i: u16, recalc_node_list: &mut Vec<u16>) {
+    fn turn_transistor_off(&self, i: u16) {
         let i = i as usize;
         if self.transistors[i].on.get() {
             self.transistors[i].on.set(false);
-            self.add_recalc_node(self.transistors[i].c1, recalc_node_list);
-            self.add_recalc_node(self.transistors[i].c2, recalc_node_list);
+            self.add_recalc_node(self.transistors[i].c1);
+            self.add_recalc_node(self.transistors[i].c2);
         }
     }
 
-    fn add_recalc_node(&self, node_number: u16, recalc_node_list: &mut Vec<u16>) {
+    fn add_recalc_node(&self, node_number: u16) {
         if node_number == NODE_GND || node_number == NODE_PWR {
             return;
         }
 
         if !self.processed_nodes[node_number as usize].get() {
-            recalc_node_list.push(node_number);
+            let (_, list_index) = self.swap_list_indices;
+            self.swap_lists[list_index].borrow_mut().push(node_number);
             self.processed_nodes[node_number as usize].set(true);
         }
     }
