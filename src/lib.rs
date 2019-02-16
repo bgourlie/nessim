@@ -45,6 +45,7 @@ enum MirroringType {
 }
 
 pub struct SimulationState {
+    all_recalc_nodes: Vec<u16>,
     nodes: Vec<Node>,
     has_ground: bool,
     has_power: bool,
@@ -85,9 +86,15 @@ impl SimulationState {
         let mut nodes = setup_nodes(&seg_defs);
         let (palette_nodes, sprite_nodes) = load_ppu_nodes();
         let (transistors, node_counts, nodes_c1_c2, _) = setup_transistors(&mut nodes, trans_defs);
+        let all_recalc_nodes = nodes
+            .iter()
+            .filter(|n| n.num != NODE_PWR && n.num != NODE_GND && n.num != EMPTYNODE)
+            .map(|n| n.num)
+            .collect::<Vec<u16>>();
 
         SimulationState {
-            nodes,
+            all_recalc_nodes,
+            nodes: nodes.into_iter().map(|def| Node::new(def)).collect(),
             node_counts,
             has_ground: false,
             has_power: false,
@@ -211,16 +218,6 @@ impl SimulationState {
         self.recalc_node_list(&[n1 as u16, n2 as u16]);
     }
 
-    fn all_nodes(&self) -> Vec<u16> {
-        let mut nodes = Vec::new();
-        for node in self.nodes.iter() {
-            if node.num != NODE_PWR && node.num != NODE_GND && node.num != EMPTYNODE {
-                nodes.push(node.num);
-            }
-        }
-        nodes
-    }
-
     fn init(&mut self, soft_reset: bool) {
         self.prev_hpos = -1;
 
@@ -271,7 +268,7 @@ impl SimulationState {
             self.set_high(NODE_CPU_IRQ);
             self.set_high(NODE_CPU_NMI);
 
-            self.recalc_node_list(&self.all_nodes());
+            self.recalc_node_list(&self.all_recalc_nodes.clone());
 
             for _ in 0..(12 * 8) {
                 self.set_high(NODE_CLK0);
@@ -776,8 +773,8 @@ impl SimulationState {
         } else if self.has_power {
             true
         } else {
-            let mut hi_area = 0_i64;
-            let mut lo_area = 0_i64;
+            let mut hi_area = 0_u64;
+            let mut lo_area = 0_u64;
             for node_number in &self.group {
                 let node = &self.nodes[*node_number as usize];
                 if node.pullup.get() {

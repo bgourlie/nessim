@@ -2,7 +2,7 @@
 mod tests;
 
 use crate::{
-    components::{Node, Transistor},
+    components::{NodeDefinition, Transistor},
     consts::{EMPTYNODE, NODE_GND, NODE_PWR},
 };
 use fnv::FnvHashMap;
@@ -217,21 +217,21 @@ pub fn load_ppu_nodes() -> (Vec<Vec<(i32, i32)>>, Vec<Vec<(i32, i32)>>) {
     (palette_nodes, sprite_nodes)
 }
 
-pub fn setup_nodes(segdefs: &[Vec<u16>]) -> Vec<Node> {
+pub fn setup_nodes(segdefs: &[Vec<u16>]) -> Vec<NodeDefinition> {
     let max_id = usize::from(
         segdefs
             .iter()
             .max_by(|seg1, seg2| seg1[0].cmp(&seg2[0]))
             .unwrap()[0],
     );
-    let mut nodes = vec![Node::default(); max_id + 1];
+    let mut nodes = vec![NodeDefinition::default(); max_id + 1];
     for seg in segdefs.iter() {
         let w = seg[0];
         let w_idx = w as usize;
         if nodes[w_idx].num == EMPTYNODE {
             nodes[w_idx].num = w as _;
-            nodes[w_idx].pullup.set(seg[1] == 1);
-            nodes[w_idx].state.set(false);
+            nodes[w_idx].pullup = seg[1] == 1;
+            nodes[w_idx].state = false;
             nodes[w_idx].area = 0;
         }
 
@@ -252,7 +252,7 @@ pub fn setup_nodes(segdefs: &[Vec<u16>]) -> Vec<Node> {
             j += 2;
         }
 
-        nodes[w_idx].area += area.abs();
+        nodes[w_idx].area += area.abs() as u64;
         nodes[w_idx].segs.push((seg[3], *seg.last().unwrap()))
     }
     nodes
@@ -260,7 +260,7 @@ pub fn setup_nodes(segdefs: &[Vec<u16>]) -> Vec<Node> {
 
 #[allow(clippy::type_complexity)]
 pub fn setup_transistors(
-    nodes: &mut Vec<Node>,
+    nodes: &mut Vec<NodeDefinition>,
     trans_defs: Vec<TransistorDefinition>,
 ) -> (
     Vec<Transistor>,

@@ -1,5 +1,30 @@
 use crate::consts::EMPTYNODE;
+use crate::consts::NODE_GND;
+use crate::consts::NODE_PWR;
 use std::cell::Cell;
+
+#[derive(Clone)]
+pub struct NodeDefinition {
+    pub area: u64,
+    pub num: u16,
+    pub pullup: bool,
+    pub state: bool,
+    pub gates: Vec<u16>,
+    pub segs: Vec<(u16, u16)>,
+}
+
+impl Default for NodeDefinition {
+    fn default() -> Self {
+        NodeDefinition {
+            area: 0,
+            num: EMPTYNODE,
+            pullup: false,
+            state: false,
+            gates: Vec::new(),
+            segs: Vec::new(),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct Node {
@@ -7,23 +32,19 @@ pub struct Node {
     pub pullup: Cell<bool>,
     pub pulldown: Cell<bool>,
     pub floating: Cell<bool>,
-    pub area: i64,
-    pub num: u16,
+    pub area: u64,
     pub gates: Vec<u16>,
-    pub segs: Vec<(u16, u16)>,
 }
 
-impl Default for Node {
-    fn default() -> Self {
+impl Node {
+    pub fn new(def: NodeDefinition) -> Self {
         Node {
-            state: Cell::new(false),
-            pullup: Cell::new(false),
+            state: Cell::new(def.state),
+            pullup: Cell::new(def.pullup),
             pulldown: Cell::new(false),
             floating: Cell::new(true),
-            area: 0,
-            num: EMPTYNODE,
-            gates: Vec::new(),
-            segs: Vec::new(),
+            area: def.area,
+            gates: def.gates,
         }
     }
 }
