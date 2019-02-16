@@ -503,6 +503,35 @@ impl SimulationState {
         self.recalc_node_list(&[node_number])
     }
 
+    fn read_db(&self) -> u8 {
+        let mut res = 0_u8;
+        for (i, node_number) in [
+            NODE_DB0, NODE_DB1, NODE_DB2, NODE_DB3, NODE_DB4, NODE_DB5, NODE_DB6, NODE_DB7,
+        ]
+        .iter()
+        .enumerate()
+        {
+            let node_number = *node_number;
+            res += (self.is_node_high(node_number) as u8) << i;
+        }
+        res
+    }
+
+    fn read_ab(&self) -> u16 {
+        let mut res = 0_u16;
+        for (i, node_number) in [
+            NODE_AB0, NODE_AB1, NODE_AB2, NODE_AB3, NODE_AB4, NODE_AB5, NODE_AB6, NODE_AB7,
+            NODE_AB8, NODE_AB9, NODE_AB10, NODE_AB11, NODE_AB12, NODE_AB13,
+        ]
+        .iter()
+        .enumerate()
+        {
+            let node_number = *node_number;
+            res += (self.is_node_high(node_number) as u16) << i;
+        }
+        res
+    }
+
     fn read_bits(&mut self, name: &str, mut n: u8) -> u16 {
         let mut res = 0_u16;
         if n == 0 {
@@ -586,7 +615,7 @@ impl SimulationState {
 
     fn read_ppu_data_bus(&mut self) -> u8 {
         if !self.is_node_high(NODE_RD) || !self.is_node_high(NODE_WR) {
-            self.last_data = self.read_bits("db", 8) as u8;
+            self.last_data = self.read_db();
         }
         self.last_data
     }
@@ -715,7 +744,7 @@ impl SimulationState {
 
     fn read_ppu_address_bus(&mut self) -> u16 {
         if self.is_node_high(NODE_ALE) {
-            self.last_address = self.read_bits("ab", 14);
+            self.last_address = self.read_ab();
         }
 
         self.last_address

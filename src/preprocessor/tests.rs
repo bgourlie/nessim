@@ -276,6 +276,62 @@ fn node_constant_tests() {
         "Wrong CPU_CLK0 constant value"
     );
     assert_eq!(
+        node_number_by_name_map["ab0"], NODE_AB0,
+        "Wrong AB0 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["ab1"], NODE_AB1,
+        "Wrong AB1 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["ab2"], NODE_AB2,
+        "Wrong AB2 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["ab3"], NODE_AB3,
+        "Wrong AB3 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["ab4"], NODE_AB4,
+        "Wrong AB4 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["ab5"], NODE_AB5,
+        "Wrong AB5 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["ab6"], NODE_AB6,
+        "Wrong AB6 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["ab7"], NODE_AB7,
+        "Wrong AB7 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["ab8"], NODE_AB8,
+        "Wrong AB8 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["ab9"], NODE_AB9,
+        "Wrong AB9 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["ab10"], NODE_AB10,
+        "Wrong AB10 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["ab11"], NODE_AB11,
+        "Wrong AB11 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["ab12"], NODE_AB12,
+        "Wrong AB12 constant value"
+    );
+    assert_eq!(
+        node_number_by_name_map["ab13"], NODE_AB13,
+        "Wrong AB13 constant value"
+    );
+    assert_eq!(
         node_number_by_name_map["cpu_ab0"], NODE_CPU_AB0,
         "Wrong CPU_AB0 constant value"
     );
