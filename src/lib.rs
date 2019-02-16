@@ -11,7 +11,6 @@ use crate::{
     components::{Node, Transistor},
     consts::*,
 };
-use fnv::FnvHashMap;
 use std::{
     cell::Cell,
     io::{Read, Seek},
@@ -47,7 +46,6 @@ enum MirroringType {
 
 pub struct SimulationState {
     nodes: Vec<Node>,
-    node_number_by_name: FnvHashMap<String, u16>,
     has_ground: bool,
     has_power: bool,
     group: Vec<u16>,
@@ -78,8 +76,8 @@ pub struct SimulationState {
 impl SimulationState {
     pub fn new() -> Self {
         use crate::preprocessor::{
-            id_conversion_table, load_node_number_by_name_map, load_ppu_nodes,
-            load_segment_definitions, load_transistor_definitions, setup_nodes, setup_transistors,
+            id_conversion_table, load_ppu_nodes, load_segment_definitions,
+            load_transistor_definitions, setup_nodes, setup_transistors,
         };
         let conversion_table = id_conversion_table();
         let seg_defs = load_segment_definitions(&conversion_table);
@@ -88,11 +86,8 @@ impl SimulationState {
         let (palette_nodes, sprite_nodes) = load_ppu_nodes();
         let (transistors, node_counts, nodes_c1_c2, _) = setup_transistors(&mut nodes, trans_defs);
 
-        let node_number_by_name = load_node_number_by_name_map(&conversion_table);
-
         SimulationState {
             nodes,
-            node_number_by_name,
             node_counts,
             has_ground: false,
             has_power: false,
@@ -354,7 +349,7 @@ impl SimulationState {
             if open_bus {
                 self.float_cpu_db();
             } else {
-                self.write_byte("cpu_db", u16::from(d));
+                self.write_cpu_db(d);
             }
         }
     }
@@ -574,7 +569,7 @@ impl SimulationState {
 
         // falling edge of /RD - put bits on bus
         if self.prev_ppu_read && !rd {
-            self.write_byte("db", u16::from(self.ppu_read(self.chr_address)));
+            self.write_db(self.ppu_read(self.chr_address));
         }
 
         // rising edge of /RD - flaot the data bus
@@ -705,11 +700,36 @@ impl SimulationState {
         }
     }
 
-    fn write_byte(&mut self, name: &str, mut x: u16) {
+    fn write_cpu_db(&mut self, val: u8) {
+        self.write_byte(
+            [
+                NODE_CPU_DB0,
+                NODE_CPU_DB1,
+                NODE_CPU_DB2,
+                NODE_CPU_DB3,
+                NODE_CPU_DB4,
+                NODE_CPU_DB5,
+                NODE_CPU_DB6,
+                NODE_CPU_DB7,
+            ],
+            val,
+        );
+    }
+
+    fn write_db(&mut self, val: u8) {
+        self.write_byte(
+            [
+                NODE_DB0, NODE_DB1, NODE_DB2, NODE_DB3, NODE_DB4, NODE_DB5, NODE_DB6, NODE_DB7,
+            ],
+            val,
+        );
+    }
+
+    fn write_byte(&mut self, nodes: [u16; 8], mut val: u8) {
         let mut recalc_nodes = [0_u16; 8];
-        for i in 0..8 {
-            let node_number = self.node_number_by_name[format!("{}{}", name, i).as_str()];
-            if x % 2 == 0 {
+        for (i, node_number) in nodes.iter().enumerate() {
+            let node_number = *node_number;
+            if val % 2 == 0 {
                 self.nodes[node_number as usize].pulldown.set(true);
                 self.nodes[node_number as usize].pullup.set(false);
             } else {
@@ -717,7 +737,7 @@ impl SimulationState {
                 self.nodes[node_number as usize].pullup.set(true);
             }
             recalc_nodes[i as usize] = node_number;
-            x >>= 1;
+            val >>= 1;
         }
 
         self.recalc_node_list(&recalc_nodes);
