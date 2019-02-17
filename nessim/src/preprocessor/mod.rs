@@ -5,17 +5,17 @@ use crate::{
     components::{NodeDefinition, Transistor, TransistorDefinition},
     consts::{EMPTYNODE, NODE_GND, NODE_PWR},
 };
-use fnv::FnvHashMap;
 use std::{
     cell::Cell,
+    collections::HashMap,
     fs::File,
     io::{BufRead, BufReader, Read},
 };
 
 pub const CPU_OFFSET: u16 = 13000;
 
-pub fn id_conversion_table() -> FnvHashMap<u16, u16> {
-    let mut map = FnvHashMap::default();
+pub fn id_conversion_table() -> HashMap<u16, u16> {
+    let mut map = HashMap::default();
     map.insert(10000 + CPU_OFFSET, 1); // vcc
     map.insert(10001 + CPU_OFFSET, 2); // vss
     map.insert(10004 + CPU_OFFSET, 1934); // reset
@@ -41,15 +41,15 @@ pub fn id_conversion_table() -> FnvHashMap<u16, u16> {
     map
 }
 
-pub fn convert_id(id: u16, conversion_table: &FnvHashMap<u16, u16>) -> u16 {
+pub fn convert_id(id: u16, conversion_table: &HashMap<u16, u16>) -> u16 {
     *conversion_table.get(&id).unwrap_or(&id)
 }
 
-pub fn load_segment_definitions(conversion_table: &FnvHashMap<u16, u16>) -> Vec<Vec<u16>> {
+pub fn load_segment_definitions(conversion_table: &HashMap<u16, u16>) -> Vec<Vec<u16>> {
     fn load_from_file<R: Read>(
         reader: R,
         segment_id_offset: u16,
-        conversion_table: &FnvHashMap<u16, u16>,
+        conversion_table: &HashMap<u16, u16>,
     ) -> Vec<Vec<u16>> {
         BufReader::new(reader)
             .lines()
@@ -85,13 +85,13 @@ pub fn load_segment_definitions(conversion_table: &FnvHashMap<u16, u16>) -> Vec<
     seg_defs
 }
 pub fn load_transistor_definitions(
-    conversion_table: &FnvHashMap<u16, u16>,
+    conversion_table: &HashMap<u16, u16>,
 ) -> Vec<TransistorDefinition> {
     fn load_from_file<R: Read>(
         reader: R,
         name_prefix: &str,
         segment_id_offset: u16,
-        conversion_table: &FnvHashMap<u16, u16>,
+        conversion_table: &HashMap<u16, u16>,
     ) -> Vec<TransistorDefinition> {
         BufReader::new(reader)
             .lines()
@@ -139,15 +139,13 @@ pub fn load_transistor_definitions(
 }
 
 #[cfg(test)]
-pub fn load_node_number_by_name_map(
-    conversion_table: &FnvHashMap<u16, u16>,
-) -> FnvHashMap<String, u16> {
+pub fn load_node_number_by_name_map(conversion_table: &HashMap<u16, u16>) -> HashMap<String, u16> {
     fn load_from_file<R: Read>(
         reader: R,
         name_prefix: &str,
         segment_id_offset: u16,
-        conversion_table: &FnvHashMap<u16, u16>,
-    ) -> FnvHashMap<String, u16> {
+        conversion_table: &HashMap<u16, u16>,
+    ) -> HashMap<String, u16> {
         BufReader::new(reader)
             .lines()
             .map(|line| {
@@ -163,7 +161,7 @@ pub fn load_node_number_by_name_map(
                     convert_id(id, conversion_table),
                 )
             })
-            .collect::<FnvHashMap<String, u16>>()
+            .collect::<HashMap<String, u16>>()
     }
 
     let mut node_names = load_from_file(
@@ -260,14 +258,14 @@ pub fn setup_transistors(
     Vec<Transistor>,
     Vec<u8>,
     Vec<Vec<u16>>,
-    FnvHashMap<String, u16>,
+    HashMap<String, u16>,
 ) {
     const MAX_NODES: usize = 34000;
     const MAX_C1_C2: usize = 95;
     let mut node_counts = vec![0_u8; MAX_NODES];
     let mut nodes_c1_c2 = vec![vec![0_u16; MAX_C1_C2]; MAX_NODES];
     let mut transistors = Vec::new();
-    let mut transistor_index_by_name = FnvHashMap::<String, u16>::default();
+    let mut transistor_index_by_name = HashMap::<String, u16>::default();
     for (i, trans_def) in trans_defs.into_iter().enumerate() {
         let mut c1 = trans_def.c1;
         let mut c2 = trans_def.c2;
