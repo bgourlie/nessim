@@ -13,10 +13,7 @@ use crate::{
     processed_nodes_map::ProcessedNodesSet,
     recalc_swap_list::RecalcSwapList,
 };
-use std::{
-    cell::Cell,
-    io::{Read, Seek},
-};
+use std::io::{Read, Seek};
 
 #[allow(dead_code)]
 enum MemoryType {

@@ -138,6 +138,7 @@ pub fn load_transistor_definitions(
     trans_defs
 }
 
+#[cfg(test)]
 pub fn load_node_number_by_name_map(
     conversion_table: &FnvHashMap<u16, u16>,
 ) -> FnvHashMap<String, u16> {
