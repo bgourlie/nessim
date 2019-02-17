@@ -1,18 +1,11 @@
-[package]
-name = "nessim"
-version = "0.1.0"
-authors = ["W. Brian Gourlie <bgourlie@gmail.com>"]
-edition = "2018"
+[workspace]
 
-[dependencies]
-fnv = "^1.0.6"
-byteorder = "^1.3.1"
-nes-rom-loader = { git = "https://github.com/bgourlie/nes-rom-loader" }
+members = [
+  "nessim"
+]
 
-[dev-dependencies]
-zip = "^0.5.0"
-criterion = "^0.2.10"
-
-[[bench]]
-name = "bench_tests"
-harness = false
+[profile.release]
+opt-level = 3
+lto = true
+debug = true
+debug-assertions = false
