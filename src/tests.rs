@@ -33,14 +33,43 @@ fn reference_tests() {
     sim.set_memory_state(MemoryType::PrgRam, &prg_ram);
 
     // Test post load state
+    verify_ram_state(&sim, &prg_ram, &chr_ram);
     verify_state(&sim, &mut file);
 
     for _ in 0..num_steps {
         for _ in 0..half_cycles_per_step {
             sim.half_step();
         }
+
+        let mut prg_ram = vec![0_u8; 0x8000];
+        let mut chr_ram = vec![0_u8; 0x2000];
+        file.read_exact(&mut prg_ram).unwrap();
+        file.read_exact(&mut chr_ram).unwrap();
+
         // Verifying state at step
+        verify_ram_state(&sim, &prg_ram, &chr_ram);
         verify_state(&sim, &mut file);
+    }
+}
+
+fn verify_ram_state(sim: &SimulationState, reference_prg: &[u8], reference_chr: &[u8]) {
+    assert_eq!(reference_prg.len(), sim.prg_ram.len());
+    assert_eq!(reference_chr.len(), sim.chr_ram.len());
+
+    for (i, byte) in reference_prg.iter().enumerate() {
+        assert_eq!(
+            *byte, sim.prg_ram[i],
+            "PRG RAM value mismatch at index {}",
+            i
+        );
+    }
+
+    for (i, byte) in reference_chr.iter().enumerate() {
+        assert_eq!(
+            *byte, sim.chr_ram[i],
+            "CHR RAM value mismatch at index {}",
+            i
+        );
     }
 }
 
