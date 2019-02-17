@@ -1,56 +1,43 @@
 use std::cell::Cell;
 
 pub struct ProcessedNodesSet {
-    set: Vec<Cell<u8>>,
+    set: Vec<Cell<bool>>,
 }
 
 impl ProcessedNodesSet {
     pub fn new(node_count: usize) -> Self {
-        let elem_count = (node_count / 8) + (if node_count % 8 != 0 { 1 } else { 0 });
+        //        let elem_count = (node_count / 8) + (if node_count % 8 != 0 { 1 } else { 0 });
         ProcessedNodesSet {
-            set: vec![Cell::new(0); elem_count],
+            set: vec![Cell::new(false); node_count],
         }
     }
 
     pub fn contains(&self, node_number: u16) -> bool {
-        let byte_index = (node_number / 8) as usize;
-        let bit_index = node_number % 8;
-        let mask = 1 << bit_index;
-        self.set[byte_index].get() & mask > 0
+        //        let byte_index = (node_number / 8) as usize;
+        //        let bit_index = node_number % 8;
+        //        let mask = 1 << bit_index;
+        //        self.set[byte_index].get() & mask > 0
+        self.set[node_number as usize].get()
     }
 
     pub fn set(&self, node_number: u16) {
-        let byte_index = (node_number / 8) as usize;
-        let bit_index = node_number % 8;
-        let mask = 1 << bit_index;
-        let byte = self.set[byte_index].get();
-        self.set[byte_index].set(byte | mask);
+        //        let byte_index = (node_number / 8) as usize;
+        //        let bit_index = node_number % 8;
+        //        let mask = 1 << bit_index;
+        //        let byte = self.set[byte_index].get();
+        //        self.set[byte_index].set(byte | mask);
+        self.set[node_number as usize].set(true)
     }
 
     pub fn clear(&self, nodes: &[u16]) {
         for node_number in nodes.iter() {
-            let byte_index = (node_number / 8) as usize;
-            let bit_index = node_number % 8;
-            let mask = 1 << bit_index;
-            let byte = self.set[byte_index].get();
-            self.set[byte_index].set(byte & !(byte & mask));
+            //            let byte_index = (node_number / 8) as usize;
+            //            let bit_index = node_number % 8;
+            //            let mask = 1 << bit_index;
+            //            let byte = self.set[byte_index].get();
+            self.set[*node_number as usize].set(false);
         }
     }
-}
-
-#[test]
-fn test_create() {
-    let set = ProcessedNodesSet::new(8);
-    assert_eq!(1, set.set.len());
-
-    let set = ProcessedNodesSet::new(9);
-    assert_eq!(2, set.set.len());
-
-    let set = ProcessedNodesSet::new(16);
-    assert_eq!(2, set.set.len());
-
-    let set = ProcessedNodesSet::new(17);
-    assert_eq!(3, set.set.len());
 }
 
 #[test]
