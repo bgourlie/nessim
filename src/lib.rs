@@ -60,7 +60,6 @@ pub struct SimulationState {
     prev_ppu_write: bool,
     prev_ppu_read: bool,
     chr_address: u16,
-    last_address: u16,
     mirroring_type: MirroringType,
     chr_ram: Box<[u8; 0x2000]>,
     nametable_ram: Box<[[u8; 0x400]; 4]>,
@@ -113,7 +112,6 @@ impl SimulationState {
             prev_ppu_read: true,
             prev_ppu_write: true,
             chr_address: 0,
-            last_address: 0,
             mirroring_type: MirroringType::Horizontal,
             chr_ram: Box::new([0; 0x2000]),
             nametable_ram: Box::new([[0; 0x400]; 4]),
@@ -567,7 +565,8 @@ impl SimulationState {
 
         // rising edge of ALE
         if self.prev_ppu_ale && ale {
-            self.chr_address = self.read_ppu_address_bus();
+            // Read PPU address bus
+            self.chr_address = self.read_ab();
         }
 
         // falling edge of /RD - put bits on bus
@@ -744,14 +743,6 @@ impl SimulationState {
         }
 
         self.recalc_node_list(&recalc_nodes);
-    }
-
-    fn read_ppu_address_bus(&mut self) -> u16 {
-        if self.is_node_high(NODE_ALE) {
-            self.last_address = self.read_ab();
-        }
-
-        self.last_address
     }
 
     fn get_node_value(&mut self) -> bool {
