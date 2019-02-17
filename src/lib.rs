@@ -1,6 +1,7 @@
 mod components;
 mod consts;
 mod preprocessor;
+mod processed_nodes_map;
 mod recalc_swap_list;
 
 #[cfg(test)]
@@ -9,6 +10,7 @@ mod tests;
 use crate::{
     components::{Node, Transistor},
     consts::*,
+    processed_nodes_map::ProcessedNodesSet,
     recalc_swap_list::RecalcSwapList,
 };
 use std::{
@@ -54,7 +56,7 @@ pub struct SimulationState {
     node_counts: Vec<u8>,
     transistors: Vec<Transistor>,
     nodes_c1_c2: Vec<Vec<u16>>,
-    processed_nodes: Vec<Cell<bool>>,
+    processed_nodes: ProcessedNodesSet,
     step_cycle_count: u8,
     prev_ppu_ale: bool,
     prev_ppu_write: bool,
@@ -106,7 +108,7 @@ impl SimulationState {
             group: Vec::new(),
             transistors,
             nodes_c1_c2,
-            processed_nodes: vec![Cell::new(false); NUM_NODES],
+            processed_nodes: ProcessedNodesSet::new(NUM_NODES),
             step_cycle_count: 0,
             prev_ppu_ale: false,
             prev_ppu_read: true,
@@ -448,9 +450,8 @@ impl SimulationState {
                 return;
             }
 
-            for node_number in self.recalc_swap_list.next_list().iter() {
-                self.processed_nodes[*node_number as usize].set(false);
-            }
+            self.processed_nodes
+                .clear(&self.recalc_swap_list.next_list());
             self.recalc_swap_list.swap();
         }
     }
@@ -477,9 +478,9 @@ impl SimulationState {
             return;
         }
 
-        if !self.processed_nodes[node_number as usize].get() {
+        if !self.processed_nodes.contains(node_number) {
             self.recalc_swap_list.push_next_list(node_number);
-            self.processed_nodes[node_number as usize].set(true);
+            self.processed_nodes.set(node_number);
         }
     }
 
